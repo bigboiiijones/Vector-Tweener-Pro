@@ -99,6 +99,7 @@ export const findPaintTarget = (
 ): PaintHit | undefined => {
   const threshold = Math.max(2, gapClosingDistance / Math.max(0.1, viewportZoom));
 
+  // Closed single-stroke targets (top-most first)
   for (let i = displayedStrokes.length - 1; i >= 0; i--) {
     const stroke = displayedStrokes[i];
     if (!stroke.points || stroke.points.length < 2) continue;
