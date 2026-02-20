@@ -1,4 +1,3 @@
-import { Stroke } from '../types';
 import { Point, Stroke } from '../types';
 import { distance } from '../utils/mathUtils';
 
@@ -10,7 +9,6 @@ export interface TransformPostProcessOptions {
   fillColor: string;
   closeThreshold: number;
 }
-
 
 const adaptClosedSeamToBezier = (points: Point[]) => {
   if (points.length < 4) return;
@@ -75,6 +73,7 @@ export const postProcessTransformedStrokes = (
   strokes: Stroke[],
   options: TransformPostProcessOptions
 ): Stroke[] => {
+  let next = [...strokes];
 
   if (options.autoClose) {
     next = next.map((stroke) => {
@@ -92,8 +91,6 @@ export const postProcessTransformedStrokes = (
         return {
           ...stroke,
           isClosed: true,
-          fillColor: stroke.fillColor || '#000000',
-          points: [...stroke.points.slice(0, -1), first]
           fillColor: options.closeCreatesFill ? (stroke.fillColor || options.fillColor) : stroke.fillColor,
           points: closedPoints
         };
@@ -136,7 +133,6 @@ export const postProcessTransformedStrokes = (
 
           mergedStroke = {
             ...mergedStroke,
-            points: [...mergedStroke.points, ...b.points.slice(1)]
             points: mergedPoints
           };
           consumed.add(b.id);
