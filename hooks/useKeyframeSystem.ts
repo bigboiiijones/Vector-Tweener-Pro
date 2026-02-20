@@ -34,7 +34,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
     const [groupBindings, setGroupBindings] = useState<GroupBinding[]>([]);
 
     // Ensure initial keyframe exists for new layers
-    const ensureInitialKeyframes = useCallback((layers: Layer[]) => {
+    const ensureInitialKeyframes = useCallback((layers: Layer[]): void => {
         setKeyframes(prev => {
             const newKeys = [...prev];
             let changed = false;
@@ -141,7 +141,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
         };
     }, [cameraKeyframes]);
 
-    const addCameraKeyframe = useCallback((frameIndex: number, transform: CameraTransform) => {
+    const addCameraKeyframe = useCallback((frameIndex: number, transform: CameraTransform): void => {
         setCameraKeyframes(prev => {
             const exists = prev.find(k => k.index === frameIndex);
             if (exists) {
@@ -156,7 +156,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
         setCameraKeyframes(prev => prev.filter(k => !indices.includes(k.index) || k.index === 0));
     }, []);
 
-    const moveCameraFrames = useCallback((selectedIndices: number[], targetIndex: number) => {
+    const moveCameraFrames = useCallback((selectedIndices: number[], targetIndex: number): void => {
         if (selectedIndices.length === 0) return;
         const sortedIndices = [...selectedIndices].sort((a, b) => a - b);
         const minIndex = sortedIndices[0];
@@ -348,7 +348,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
     }, [applyToLayers, getLayerContext, groupBindings]);
 
     // Keyframe Moving logic updated for specific Keyframe IDs
-    const moveKeyframes = useCallback((selectedKeyframeIds: Set<string>, offset: number) => {
+    const moveKeyframes = useCallback((selectedKeyframeIds: Set<string>, offset: number): void => {
          if (offset === 0 || selectedKeyframeIds.size === 0) return;
          
          setKeyframes(prev => {
@@ -381,7 +381,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
         return fillStroke.id;
     }, []);
 
-    const deleteSelected = useCallback((currentFrameIndex: number, selectedIds: Set<string>, activeLayerId: string) => {
+    const deleteSelected = useCallback((currentFrameIndex: number, selectedIds: Set<string>, activeLayerId: string): void => {
         setKeyframes(prev => {
             const nextKeys = prev.map(k => {
                 if (k.index === currentFrameIndex && k.layerId === activeLayerId) {
@@ -414,7 +414,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
     }, []);
 
     // Reverse selected strokes (vector op)
-    const reverseSelected = useCallback((currentFrameIndex: number, selectedIds: Set<string>, activeLayerId: string) => {
+    const reverseSelected = useCallback((currentFrameIndex: number, selectedIds: Set<string>, activeLayerId: string): void => {
         setKeyframes(prev => {
             const nextKeys = prev.map(k => {
                 if (k.index === currentFrameIndex && k.layerId === activeLayerId) {
@@ -667,7 +667,8 @@ export const useKeyframeSystem = (totalFrames: number) => {
         points: Point[],
         fillColor: string,
         sourceStrokeIds: string[] = []
-    ) => {
+    ):
+        string | undefined => {
         if (points.length < 3) return undefined;
         const fillStroke: Stroke = {
             id: uuidv4(),
@@ -705,10 +706,11 @@ export const useKeyframeSystem = (totalFrames: number) => {
             }
             return nextKeys;
         });
+        return fillStroke.id;
     }, []);
 
 
-    const replaceStrokesForFrame = useCallback((currentFrameIndex: number, activeLayerId: string, strokes: Stroke[]) => {
+    const replaceStrokesForFrame = useCallback((currentFrameIndex: number, activeLayerId: string, strokes: Stroke[]): void => {
         setKeyframes(prev => {
             const idx = prev.findIndex(k => k.index === currentFrameIndex && k.layerId === activeLayerId);
             const next = [...prev];
@@ -734,7 +736,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
         });
     }, []);
 
-    const replaceCompositeFrameStrokes = useCallback((currentFrameIndex: number, strokes: Stroke[]) => {
+    const replaceCompositeFrameStrokes = useCallback((currentFrameIndex: number, strokes: Stroke[]): void => {
         const grouped = new Map<string, Stroke[]>();
         strokes.forEach(stroke => {
             const list = grouped.get(stroke.layerId) || [];
