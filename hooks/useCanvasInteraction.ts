@@ -36,6 +36,8 @@ interface InteractionProps {
     viewport: ViewportTransform;
     setViewport: (v: ViewportTransform) => void;
     onStrokeUpdate?: (strokeId: string, updates: Partial<Stroke>) => void;
+    onDeleteStroke?: (strokeId: string) => void;
+    onCreateFillStroke?: (points: Point[], sourceIds?: string[]) => void;
 }
 
 export const useCanvasInteraction = ({
@@ -64,7 +66,9 @@ export const useCanvasInteraction = ({
     tempCameraTransform, // Destructured
     viewport,
     setViewport,
-    onStrokeUpdate
+    onStrokeUpdate,
+    onDeleteStroke,
+    onCreateFillStroke
 }: InteractionProps) => {
 
     const [isDrawing, setIsDrawing] = useState(false);
@@ -93,7 +97,9 @@ export const useCanvasInteraction = ({
         toolOptions.transformMode,
         toolOptions.snappingEnabled,
         activeLayerId,
-        toolOptions.crossLayerSnapping
+        toolOptions.crossLayerSnapping,
+        toolOptions.transformEditAllLayers,
+        toolOptions.bindLinkedFillsOnTransform
     );
 
     const forceFinishPolyline = () => {
@@ -174,14 +180,30 @@ export const useCanvasInteraction = ({
 
         // Paint Bucket Tool
         if (currentTool === ToolType.PAINT_BUCKET) {
-            const paintPool = toolOptions.crossLayerPainting ? displayedStrokes : displayedStrokes.filter(s => s.layerId === activeLayerId);
-            const targetStroke = findPaintTarget(pos, paintPool, toolOptions.gapClosingDistance, viewport.zoom);
+            const basePool = toolOptions.crossLayerPainting ? displayedStrokes : displayedStrokes.filter(s => s.layerId === activeLayerId);
+            const paintPool = toolOptions.paintBucketMode === 'FILL'
+                ? basePool.filter(s => !(((s.width || 0) <= 0) && (!s.color || s.color === 'transparent')))
+                : basePool;
+            const paintHit = findPaintTarget(pos, paintPool, toolOptions.gapClosingDistance, viewport.zoom);
 
-            if (targetStroke && onStrokeUpdate) {
-                onStrokeUpdate(targetStroke.id, {
-                    fillColor: toolOptions.defaultFillColor,
-                    isClosed: true 
-                });
+            if (paintHit) {
+                if (toolOptions.paintBucketMode === 'ERASE') {
+                    if (paintHit.kind === 'STROKE' && paintHit.stroke) {
+                        const isFillOnly = (paintHit.stroke.width || 0) <= 0 && (!paintHit.stroke.color || paintHit.stroke.color === 'transparent');
+                        if (isFillOnly) {
+                            onDeleteStroke?.(paintHit.stroke.id);
+                        } else if (onStrokeUpdate) {
+                            onStrokeUpdate(paintHit.stroke.id, { fillColor: undefined });
+                        }
+                    }
+                } else if (paintHit.kind === 'STROKE' && paintHit.stroke && onStrokeUpdate) {
+                    onStrokeUpdate(paintHit.stroke.id, {
+                        fillColor: toolOptions.defaultFillColor,
+                        isClosed: true
+                    });
+                } else if (paintHit.kind === 'LOOP' && paintHit.loopPoints) {
+                    onCreateFillStroke?.(paintHit.loopPoints, paintHit.sourceStrokeIds);
+                }
             }
             return;
         }
@@ -372,6 +394,9 @@ export const useCanvasInteraction = ({
                      const postProcessed = postProcessTransformedStrokes(modifiedStrokes, {
                          autoClose: toolOptions.autoClose,
                          autoMerge: toolOptions.autoMerge,
+                         bezierAdaptive: toolOptions.bezierAdaptive,
+                         closeCreatesFill: toolOptions.closeCreatesFill,
+                         fillColor: toolOptions.defaultFillColor,
                          closeThreshold: Math.max(2, toolOptions.gapClosingDistance / Math.max(0.2, viewport.zoom))
                      });
                      updateStrokes(postProcessed);
