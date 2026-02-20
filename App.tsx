@@ -71,7 +71,9 @@ const App: React.FC = () => {
       defaultFillColor: '#000000',
       drawStroke: true,
       drawFill: false,
-      gapClosingDistance: 20
+      gapClosingDistance: 20,
+      paintBucketMode: 'FILL',
+      bezierAdaptive: true
   });
   
   const svgRef = useRef<SVGSVGElement>(null);
@@ -207,7 +209,8 @@ const App: React.FC = () => {
       tempCameraTransform: tempCameraTransform, // Added this prop
       viewport,
       setViewport,
-      onStrokeUpdate: (id, updates) => keyframeSystem.updateStrokeById(currentFrameIndex, id, updates)
+      onStrokeUpdate: (id, updates) => keyframeSystem.updateStrokeById(currentFrameIndex, id, updates),
+      onDeleteStroke: (id) => keyframeSystem.deleteStrokeById(currentFrameIndex, id, layerSystem.activeLayerId)
   });
 
   const bindActions = useBindActions({

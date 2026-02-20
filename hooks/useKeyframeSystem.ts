@@ -446,6 +446,38 @@ export const useKeyframeSystem = (totalFrames: number) => {
         });
     }, []);
 
+
+    const adaptJointToBezier = (points: Point[], joinIndex: number): Point[] => {
+        if (joinIndex <= 0 || joinIndex >= points.length - 1) return points;
+        const prev = points[joinIndex - 1];
+        const joint = points[joinIndex];
+        const next = points[joinIndex + 1];
+        const inDx = joint.x - prev.x;
+        const inDy = joint.y - prev.y;
+        const outDx = next.x - joint.x;
+        const outDy = next.y - joint.y;
+        const inLen = Math.hypot(inDx, inDy);
+        const outLen = Math.hypot(outDx, outDy);
+        if (inLen < 0.001 || outLen < 0.001) return points;
+
+        const dirX = (inDx / inLen + outDx / outLen) / 2;
+        const dirY = (inDy / inLen + outDy / outLen) / 2;
+        const dirLen = Math.hypot(dirX, dirY);
+        if (dirLen < 0.001) return points;
+
+        const nx = dirX / dirLen;
+        const ny = dirY / dirLen;
+        const handleLength = Math.min(inLen, outLen) * 0.35;
+
+        const clone = [...points];
+        clone[joinIndex] = {
+            ...joint,
+            cp1: { x: joint.x - nx * handleLength, y: joint.y - ny * handleLength },
+            cp2: { x: joint.x + nx * handleLength, y: joint.y + ny * handleLength }
+        };
+        return clone;
+    };
+
     const commitStroke = useCallback((
         points: Point[], 
         tool: ToolType, 
@@ -472,6 +504,11 @@ export const useKeyframeSystem = (totalFrames: number) => {
                      processedPoints = smoothPolyline(simple, 0.35);
                 }
             } 
+        }
+
+        if (isClosed && options.bezierAdaptive && processedPoints.length > 3) {
+            const closedPoints = [...processedPoints.slice(0, -1), processedPoints[0]];
+            processedPoints = adaptJointToBezier(closedPoints, closedPoints.length - 2);
         }
 
         const newStroke: Stroke = {
@@ -530,8 +567,10 @@ export const useKeyframeSystem = (totalFrames: number) => {
                         let mergedPoints: Point[] = [];
                         if (mergeType === 'APPEND_TO_END') {
                             mergedPoints = [...targetStroke.points, ...processedPoints.slice(1)];
+                            if (options.bezierAdaptive) mergedPoints = adaptJointToBezier(mergedPoints, Math.max(1, targetStroke.points.length - 1));
                         } else {
                             mergedPoints = [...processedPoints, ...targetStroke.points.slice(1)];
+                            if (options.bezierAdaptive) mergedPoints = adaptJointToBezier(mergedPoints, Math.max(1, processedPoints.length - 1));
                         }
                         const mergedStroke = { ...targetStroke, points: mergedPoints, isSelected: true };
                         mergedStrokeId = mergedStroke.id;
@@ -589,6 +628,16 @@ export const useKeyframeSystem = (totalFrames: number) => {
         return mergedStrokeId || newStroke.id;
     }, []);
 
+
+    const deleteStrokeById = useCallback((currentFrameIndex: number, strokeId: string, activeLayerId: string) => {
+        setKeyframes(prev => prev.map(k => {
+            if (k.index !== currentFrameIndex || k.layerId !== activeLayerId) return k;
+            const nextStrokes = k.strokes.filter(s => s.id !== strokeId);
+            if (nextStrokes.length === k.strokes.length) return k;
+            return { ...k, strokes: nextStrokes, type: k.type === 'HOLD' ? 'KEY' : k.type };
+        }));
+    }, []);
+
     const updateEasing = useCallback((id: string, easing: EasingType) => {
         setKeyframes(prev => prev.map(k => k.id === id ? { ...k, easing } : k));
     }, []);
@@ -643,6 +692,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
         deleteSelected,
         reverseSelected,
         updateStrokeById,
+        deleteStrokeById,
         updateEasing,
         createBinding,
         setFramePairBindings,
