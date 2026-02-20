@@ -1,9 +1,40 @@
-import { Stroke } from '../types';
+import { Point, Stroke } from '../types';
 import { distance } from '../utils/mathUtils';
+
+const adaptJointToBezier = (points: Point[], joinIndex: number) => {
+  if (joinIndex <= 0 || joinIndex >= points.length - 1) return;
+  const prev = points[joinIndex - 1];
+  const joint = points[joinIndex];
+  const next = points[joinIndex + 1];
+
+  const inDx = joint.x - prev.x;
+  const inDy = joint.y - prev.y;
+  const outDx = next.x - joint.x;
+  const outDy = next.y - joint.y;
+
+  const inLen = Math.hypot(inDx, inDy);
+  const outLen = Math.hypot(outDx, outDy);
+  if (inLen < 0.001 || outLen < 0.001) return;
+
+  const dirX = (inDx / inLen + outDx / outLen) / 2;
+  const dirY = (inDy / inLen + outDy / outLen) / 2;
+  const dirLen = Math.hypot(dirX, dirY);
+  if (dirLen < 0.001) return;
+
+  const nx = dirX / dirLen;
+  const ny = dirY / dirLen;
+  const handleLength = Math.min(inLen, outLen) * 0.35;
+
+  points[joinIndex] = {
+    ...joint,
+    cp1: { x: joint.x - nx * handleLength, y: joint.y - ny * handleLength },
+    cp2: { x: joint.x + nx * handleLength, y: joint.y + ny * handleLength }
+  };
+};
 
 export const postProcessTransformedStrokes = (
   strokes: Stroke[],
-  options: { autoClose: boolean; autoMerge: boolean; closeThreshold: number }
+  options: { autoClose: boolean; autoMerge: boolean; bezierAdaptive: boolean; closeThreshold: number }
 ): Stroke[] => {
   let next = [...strokes];
 
@@ -13,11 +44,17 @@ export const postProcessTransformedStrokes = (
       const first = stroke.points[0];
       const last = stroke.points[stroke.points.length - 1];
       if (distance(first, last) <= options.closeThreshold) {
+        const closedPoints = [...stroke.points.slice(0, -1), first];
+        if (options.bezierAdaptive) {
+          adaptJointToBezier(closedPoints, 0);
+          adaptJointToBezier(closedPoints, closedPoints.length - 2);
+        }
+
         return {
           ...stroke,
           isClosed: true,
           fillColor: stroke.fillColor || '#000000',
-          points: [...stroke.points.slice(0, -1), first]
+          points: closedPoints
         };
       }
       return stroke;
@@ -42,9 +79,15 @@ export const postProcessTransformedStrokes = (
         const bStart = b.points[0];
 
         if (distance(aEnd, bStart) <= options.closeThreshold) {
+          const joinIndex = mergedStroke.points.length - 1;
+          const mergedPoints = [...mergedStroke.points, ...b.points.slice(1)];
+          if (options.bezierAdaptive) {
+            adaptJointToBezier(mergedPoints, Math.max(1, joinIndex));
+          }
+
           mergedStroke = {
             ...mergedStroke,
-            points: [...mergedStroke.points, ...b.points.slice(1)]
+            points: mergedPoints
           };
           consumed.add(b.id);
         }

@@ -126,6 +126,8 @@ export interface ToolOptions {
     drawStroke: boolean;
     drawFill: boolean;
     gapClosingDistance: number;
+    paintBucketMode: 'FILL' | 'ERASE';
+    bezierAdaptive: boolean;
 }
 
 // --- Layer System Types ---
