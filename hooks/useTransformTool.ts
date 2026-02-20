@@ -133,6 +133,31 @@ export const useTransformTool = (
 
     const selectableStrokes = transformEditAllLayers ? strokes : strokes.filter(s => s.layerId === activeLayerId);
 
+    const selectableStrokes = transformEditAllLayers
+        ? strokes
+        : strokes.filter(s => s.layerId === activeLayerId);
+
+
+
+    const getSelectionCenter = (sel: TransformSelection[], strokeSource: Stroke[]): Point | null => {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        let has = false;
+        sel.forEach(s => {
+            const stroke = strokeSource.find(st => st.id === s.strokeId);
+            if (!stroke) return;
+            s.pointIndices.forEach(idx => {
+                const p = stroke.points[idx];
+                minX = Math.min(minX, p.x);
+                minY = Math.min(minY, p.y);
+                maxX = Math.max(maxX, p.x);
+                maxY = Math.max(maxY, p.y);
+                has = true;
+            });
+        });
+        if (!has) return null;
+        return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+    };
+
     const updateCentroid = (sel: TransformSelection[], strokeSource: Stroke[]) => {
         const allSelectedPoints: Point[] = [];
         sel.forEach(s => {

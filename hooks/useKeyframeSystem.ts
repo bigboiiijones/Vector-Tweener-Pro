@@ -153,6 +153,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
             }
             return [...prev, { id: uuidv4(), index: frameIndex, transform, easing: 'LINEAR' }];
         });
+        return fillStroke.id;
     }, []);
 
     const deleteCameraKeyframes = useCallback((indices: number[]) => {
@@ -183,6 +184,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
             newKeyframes = newKeyframes.filter(k => !newIndices.has(k.index));
             return [...newKeyframes, ...movedFrames].sort((a, b) => a.index - b.index);
         });
+        return fillStroke.id;
     }, []);
 
 
@@ -380,6 +382,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
              const newMoved = moving.map(k => ({ ...k, index: movedMap.get(k.id)! }));
              return [...finalKeys, ...newMoved];
          });
+        return fillStroke.id;
     }, []);
 
     const deleteSelected = useCallback((currentFrameIndex: number, selectedIds: Set<string>, activeLayerId: string): void => {
@@ -411,6 +414,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
             }
             return nextKeys;
         });
+        return fillStroke.id;
     }, []);
 
     // Reverse selected strokes (vector op)
@@ -449,6 +453,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
             }
             return nextKeys;
         });
+        return fillStroke.id;
     }, []);
 
 
