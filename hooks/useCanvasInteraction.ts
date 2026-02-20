@@ -6,6 +6,8 @@ import { distance, getRectPoints, getCirclePoints, getTrianglePoints, getStarPoi
 import { calculateSelection } from '../utils/selectionUtils';
 import { getSnappedPoint } from '../logic/snapping';
 import { useTransformTool } from './useTransformTool';
+import { findPaintTarget } from '../logic/paintBucket';
+import { postProcessTransformedStrokes } from '../logic/transformPostprocess';
 
 interface InteractionProps {
     currentTool: ToolType;
@@ -16,7 +18,7 @@ interface InteractionProps {
     displayedStrokes: Stroke[];
     addKeyframe: (idx: number, copy?: boolean) => void; // Updated signature
     addCameraKeyframe: (idx: number, t: CameraTransform) => void;
-    commitStroke: (points: Point[], tool: ToolType, idx: number, linked: string[], opts: ToolOptions, layerId: string) => string | undefined;
+    commitStroke: (points: Point[], tool: ToolType, idx: number, linked: string[], opts: ToolOptions, layerId: string, isClosed?: boolean) => string | undefined;
     selectedStrokeIds: Set<string>;
     setSelectedStrokeIds: (s: Set<string>) => void;
     corresSelection: Set<string>;
@@ -172,69 +174,11 @@ export const useCanvasInteraction = ({
 
         // Paint Bucket Tool
         if (currentTool === ToolType.PAINT_BUCKET) {
-            // Simple logic: Find stroke under cursor. If found, toggle fill or set fill.
-            // For "gap closing", we would need to check if it's open and close it.
-            
-            // Find stroke under cursor
-            // We need a hit test function. Let's iterate visible strokes.
-            // This is a simple bounding box or point-in-stroke check.
-            // Since we don't have a robust spatial index here, we iterate.
-            
-            const clickPos = pos;
-            const threshold = 10 / viewport.zoom;
-            
-            let targetStrokeId: string | null = null;
-            
-            // Iterate in reverse draw order (top first)
-            for (let i = displayedStrokes.length - 1; i >= 0; i--) {
-                const stroke = displayedStrokes[i];
-                // Simple AABB check first
-                const minX = Math.min(...stroke.points.map(p => p.x));
-                const maxX = Math.max(...stroke.points.map(p => p.x));
-                const minY = Math.min(...stroke.points.map(p => p.y));
-                const maxY = Math.max(...stroke.points.map(p => p.y));
-                
-                if (clickPos.x >= minX - threshold && clickPos.x <= maxX + threshold &&
-                    clickPos.y >= minY - threshold && clickPos.y <= maxY + threshold) {
-                    
-                    // Detailed check: distance to any segment
-                    let minD = Infinity;
-                    for (let j = 0; j < stroke.points.length - 1; j++) {
-                        // Point to segment distance... simplified: distance to point
-                        const d = distance(clickPos, stroke.points[j]);
-                        if (d < minD) minD = d;
-                    }
-                    if (minD < threshold) {
-                        targetStrokeId = stroke.id;
-                        break;
-                    }
-                    
-                    // Also check if inside closed shape?
-                    // Point-in-polygon check would be better for paint bucket.
-                    // If user clicks INSIDE a shape, fill it.
-                    // Ray casting algorithm.
-                    if (stroke.isClosed || (distance(stroke.points[0], stroke.points[stroke.points.length-1]) < threshold)) {
-                        // Check point in polygon
-                        let inside = false;
-                        for (let j = 0, k = stroke.points.length - 1; j < stroke.points.length; k = j++) {
-                            const xi = stroke.points[j].x, yi = stroke.points[j].y;
-                            const xj = stroke.points[k].x, yj = stroke.points[k].y;
-                            const intersect = ((yi > clickPos.y) !== (yj > clickPos.y))
-                                && (clickPos.x < (xj - xi) * (clickPos.y - yi) / (yj - yi) + xi);
-                            if (intersect) inside = !inside;
-                        }
-                        if (inside) {
-                            targetStrokeId = stroke.id;
-                            break;
-                        }
-                    }
-                }
-            }
+            const paintPool = toolOptions.crossLayerPainting ? displayedStrokes : displayedStrokes.filter(s => s.layerId === activeLayerId);
+            const targetStroke = findPaintTarget(pos, paintPool, toolOptions.gapClosingDistance, viewport.zoom);
 
-            if (targetStrokeId && onStrokeUpdate) {
-                // Update the stroke with fill color
-                // Also ensure it is closed if it wasn't
-                onStrokeUpdate(targetStrokeId, { 
+            if (targetStroke && onStrokeUpdate) {
+                onStrokeUpdate(targetStroke.id, {
                     fillColor: toolOptions.defaultFillColor,
                     isClosed: true 
                 });
@@ -273,7 +217,7 @@ export const useCanvasInteraction = ({
             if (pendingPoints.length > 2 && distance(snappedPos, pendingPoints[0]) < 15) {
                 // Close loop (if near start)
                 const finalPoints = [...pendingPoints, pendingPoints[0]];
-                commitStroke(finalPoints, currentTool, currentFrameIndex, [], toolOptions, activeLayerId);
+                commitStroke(finalPoints, currentTool, currentFrameIndex, [], toolOptions, activeLayerId, true);
                 setPendingPoints([]);
                 setCurrentStroke(null);
                 setIsDrawing(false);
@@ -425,7 +369,12 @@ export const useCanvasInteraction = ({
         if (currentTool === ToolType.TRANSFORM) {
              if (isDrawing) {
                  handleTransformUp((modifiedStrokes) => {
-                     updateStrokes(modifiedStrokes);
+                     const postProcessed = postProcessTransformedStrokes(modifiedStrokes, {
+                         autoClose: toolOptions.autoClose,
+                         autoMerge: toolOptions.autoMerge,
+                         closeThreshold: Math.max(2, toolOptions.gapClosingDistance / Math.max(0.2, viewport.zoom))
+                     });
+                     updateStrokes(postProcessed);
                  });
                  setIsDrawing(false);
              } else if (selectionBox) {

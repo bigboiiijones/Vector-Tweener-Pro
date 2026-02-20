@@ -13,6 +13,7 @@ import {
   alignPhase,
   upsampleStrokeTopology 
 } from '../utils/mathUtils';
+import { applyTweenedStrokeStyle } from './styleTweening';
 
 const GUIDE_SNAP_DISTANCE = 15; 
 const RESAMPLE_RESOLUTION = 60; 
@@ -94,7 +95,8 @@ export const calculateTweens = (
                     layerId: source.layerId,
                     points: tweenPoints, 
                     isSelected: false,
-                    parents: [source.id, target.id]
+                    parents: [source.id, target.id],
+                    ...applyTweenedStrokeStyle(source, target, t)
                 });
                 handled = true;
             }
@@ -107,12 +109,14 @@ export const calculateTweens = (
                         results.forEach((res, i) => {
                             const guide = findMotionPath(prev, getPointsCentroid(res.start), getPointsCentroid(res.end), [bindingSourceStrokes[0].id]);
                             const tweenPoints = interpolatePaths(res.start, res.end, t, guide?.points);
+                            const matchedTarget = bindingTargetStrokes.find(st => st.id === res.mappedStrokeId) || bindingTargetStrokes[0];
                             tweenedStrokes.push({ 
                                 id: `tween-${binding.id}-${i}`, 
                                 layerId: bindingSourceStrokes[0].layerId,
                                 points: tweenPoints, 
                                 isSelected: false,
-                                parents: [bindingSourceStrokes[0].id, res.mappedStrokeId]
+                                parents: [bindingSourceStrokes[0].id, res.mappedStrokeId],
+                                ...applyTweenedStrokeStyle(bindingSourceStrokes[0], matchedTarget, t)
                             });
                         });
                         handled = true;
@@ -124,12 +128,14 @@ export const calculateTweens = (
                         results.forEach((res, i) => {
                             const guide = findMotionPath(prev, getPointsCentroid(res.start), getPointsCentroid(res.end), binding.sourceStrokeIds);
                             const tweenPoints = interpolatePaths(res.start, res.end, t, guide?.points);
+                            const matchedSource = bindingSourceStrokes.find(st => st.id === res.mappedStrokeId) || bindingSourceStrokes[0];
                             tweenedStrokes.push({ 
                                 id: `tween-${binding.id}-${i}`, 
                                 layerId: bindingTargetStrokes[0].layerId,
                                 points: tweenPoints, 
                                 isSelected: false,
-                                parents: [res.mappedStrokeId, bindingTargetStrokes[0].id]
+                                parents: [res.mappedStrokeId, bindingTargetStrokes[0].id],
+                                ...applyTweenedStrokeStyle(matchedSource, bindingTargetStrokes[0], t)
                             });
                         });
                         handled = true;
@@ -164,12 +170,15 @@ export const calculateTweens = (
                 const tweenPoints = interpolatePaths(normSource, normTarget, t, guide?.points);
                 // Inherit layer from first source
                 const lId = bindingSourceStrokes[0]?.layerId || 'default';
+                const styleSource = bindingSourceStrokes[0];
+                const styleTarget = bindingTargetStrokes[0] || styleSource;
                 tweenedStrokes.push({ 
                     id: `tween-${binding.id}`, 
                     layerId: lId,
                     points: tweenPoints, 
                     isSelected: false,
-                    parents: [...binding.sourceStrokeIds, ...binding.targetStrokeIds]
+                    parents: [...binding.sourceStrokeIds, ...binding.targetStrokeIds],
+                    ...applyTweenedStrokeStyle(styleSource, styleTarget, t)
                 });
             }
         }
@@ -236,7 +245,8 @@ export const calculateTweens = (
             layerId: source.layerId,
             points: tweenPoints, 
             isSelected: false,
-            parents: [source.id, target.id]
+            parents: [source.id, target.id],
+            ...applyTweenedStrokeStyle(source, target, t)
         });
     });
 

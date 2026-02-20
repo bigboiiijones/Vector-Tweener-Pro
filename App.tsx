@@ -55,6 +55,9 @@ const App: React.FC = () => {
       autoMatchStrategy: 'INDEX',
       snappingEnabled: true,
       crossLayerSnapping: false,
+      crossLayerPainting: true,
+      crossGroupPainting: true,
+      closeCreatesFill: true,
       smoothingFactor: 20,
       showBezierHandles: true,
       transformMode: TransformMode.TRANSLATE,
@@ -204,7 +207,7 @@ const App: React.FC = () => {
       tempCameraTransform: tempCameraTransform, // Added this prop
       viewport,
       setViewport,
-      onStrokeUpdate: (id, updates) => updateSelectedStrokes(updates) // The hook selects it first, so this updates the selected stroke.
+      onStrokeUpdate: (id, updates) => keyframeSystem.updateStrokeById(currentFrameIndex, id, updates)
   });
 
   const bindActions = useBindActions({

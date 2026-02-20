@@ -27,6 +27,7 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
     
     const isDrawTool = [ToolType.PEN, ToolType.POLYLINE, ToolType.CURVE, ToolType.RECTANGLE, ToolType.CIRCLE, ToolType.TRIANGLE, ToolType.STAR].includes(currentTool);
     const isTransformTool = currentTool === ToolType.TRANSFORM;
+    const isPaintTool = currentTool === ToolType.PAINT_BUCKET;
     const hasSelection = selectedStrokeIds.size > 0;
 
     // Local state for selection properties to avoid jitter
@@ -151,6 +152,16 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                                 className="w-full h-1 bg-blue-600 rounded-lg appearance-none cursor-pointer"
                             />
                         </div>
+
+                        <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-blue-300">Fill Color</span>
+                            <input
+                                type="color"
+                                value={firstSelectedStroke?.fillColor || options.defaultFillColor}
+                                onChange={(e) => updateSelectedStrokes({ fillColor: e.target.value, isClosed: true })}
+                                className="w-6 h-6 rounded cursor-pointer bg-transparent border-none"
+                            />
+                        </div>
                     </div>
                 )}
 
@@ -188,6 +199,32 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                         <Spline size={14} />
                         <span>Show Handles</span>
                     </button>
+                )}
+                {isTransformTool && (
+                    <>
+                        <button 
+                            onClick={toggleAutoClose}
+                            className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
+                                options.autoClose 
+                                ? 'bg-green-900/30 border-green-500 text-green-200' 
+                                : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
+                            }`}
+                        >
+                            <Magnet size={14} />
+                            <span>Cling / Close</span>
+                        </button>
+                        <button 
+                            onClick={toggleAutoMerge}
+                            className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
+                                options.autoMerge 
+                                ? 'bg-blue-900/30 border-blue-500 text-blue-200' 
+                                : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
+                            }`}
+                        >
+                            <Merge size={14} />
+                            <span>Auto-Merge</span>
+                        </button>
+                    </>
                 )}
 
                 {/* DRAWING PROPERTIES (Global) */}
@@ -360,6 +397,34 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                 )}
 
                 <div className="h-px bg-gray-700 my-1"/>
+
+                {isPaintTool && (
+                    <div className="space-y-2 p-2 bg-amber-900/20 border border-amber-700/40 rounded">
+                        <div className="text-[10px] uppercase tracking-wider text-amber-300 font-bold">Paint Bucket</div>
+                        <div className="space-y-1">
+                            <div className="flex justify-between text-[10px] text-gray-400">
+                                <span>Gap Closing</span>
+                                <span>{options.gapClosingDistance}px</span>
+                            </div>
+                            <input
+                                type="range" min="1" max="80" step="1"
+                                value={options.gapClosingDistance}
+                                onChange={(e) => setGapClosing(parseInt(e.target.value))}
+                                className="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+                            />
+                        </div>
+                        <button onClick={() => setOptions({ ...options, crossLayerPainting: !options.crossLayerPainting })}
+                            className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${options.crossLayerPainting ? 'bg-indigo-900/30 border-indigo-500 text-indigo-200' : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'}`}>
+                            <Layers size={14} />
+                            <span>Cross-Layer Paint</span>
+                        </button>
+                        <button onClick={() => setOptions({ ...options, crossGroupPainting: !options.crossGroupPainting })}
+                            className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${options.crossGroupPainting ? 'bg-indigo-900/30 border-indigo-500 text-indigo-200' : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'}`}>
+                            <Layers size={14} />
+                            <span>Cross-Group Paint</span>
+                        </button>
+                    </div>
+                )}
 
                 {/* Match Strategy */}
                 <button 
