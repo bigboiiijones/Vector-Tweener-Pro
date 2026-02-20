@@ -159,7 +159,7 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                             <input
                                 type="color"
                                 value={firstSelectedStroke?.fillColor || options.defaultFillColor}
-                                onChange={(e) => updateSelectedStrokes({ fillColor: e.target.value, isClosed: true })}
+                                onChange={(e) => updateSelectedStrokes({ fillColor: e.target.value })}
                                 className="w-6 h-6 rounded cursor-pointer bg-transparent border-none"
                             />
                         </div>
@@ -178,6 +178,7 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                             <input
                                 type="checkbox"
                                 checked={!firstSelectedStroke?.fillColor || firstSelectedStroke.fillColor === 'transparent'}
+                                onChange={(e) => updateSelectedStrokes(e.target.checked ? { fillColor: undefined } : { fillColor: options.defaultFillColor })}
                                 onChange={(e) => updateSelectedStrokes(e.target.checked ? { fillColor: undefined } : { fillColor: options.defaultFillColor, isClosed: true })}
                                 className="w-3 h-3 rounded bg-gray-700 border-gray-600"
                             />

@@ -79,10 +79,18 @@ export const postProcessTransformedStrokes = (
         const bStart = b.points[0];
 
         if (distance(aEnd, bStart) <= options.closeThreshold) {
-          const joinIndex = mergedStroke.points.length - 1;
+          const joinIndex = Math.max(1, mergedStroke.points.length - 1);
           const mergedPoints = [...mergedStroke.points, ...b.points.slice(1)];
+          const incomingJoin = mergedStroke.points[mergedStroke.points.length - 1];
+          const outgoingJoin = b.points[0];
+          mergedPoints[joinIndex] = {
+            ...mergedPoints[joinIndex],
+            cp1: mergedPoints[joinIndex].cp1 || incomingJoin.cp1,
+            cp2: outgoingJoin.cp2 || mergedPoints[joinIndex].cp2
+          };
+
           if (options.bezierAdaptive) {
-            adaptJointToBezier(mergedPoints, Math.max(1, joinIndex));
+            adaptJointToBezier(mergedPoints, joinIndex);
           }
 
           mergedStroke = {

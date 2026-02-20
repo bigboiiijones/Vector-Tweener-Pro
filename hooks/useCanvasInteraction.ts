@@ -37,6 +37,7 @@ interface InteractionProps {
     setViewport: (v: ViewportTransform) => void;
     onStrokeUpdate?: (strokeId: string, updates: Partial<Stroke>) => void;
     onDeleteStroke?: (strokeId: string) => void;
+    onCreateFillStroke?: (points: Point[], sourceIds?: string[]) => void;
 }
 
 export const useCanvasInteraction = ({
@@ -66,7 +67,8 @@ export const useCanvasInteraction = ({
     viewport,
     setViewport,
     onStrokeUpdate,
-    onDeleteStroke
+    onDeleteStroke,
+    onCreateFillStroke
 }: InteractionProps) => {
 
     const [isDrawing, setIsDrawing] = useState(false);
@@ -177,16 +179,20 @@ export const useCanvasInteraction = ({
         // Paint Bucket Tool
         if (currentTool === ToolType.PAINT_BUCKET) {
             const paintPool = toolOptions.crossLayerPainting ? displayedStrokes : displayedStrokes.filter(s => s.layerId === activeLayerId);
-            const targetStroke = findPaintTarget(pos, paintPool, toolOptions.gapClosingDistance, viewport.zoom);
+            const paintHit = findPaintTarget(pos, paintPool, toolOptions.gapClosingDistance, viewport.zoom);
 
-            if (targetStroke) {
+            if (paintHit) {
                 if (toolOptions.paintBucketMode === 'ERASE') {
-                    onDeleteStroke?.(targetStroke.id);
-                } else if (onStrokeUpdate) {
-                    onStrokeUpdate(targetStroke.id, {
+                    if (paintHit.kind === 'STROKE' && paintHit.stroke) {
+                        onDeleteStroke?.(paintHit.stroke.id);
+                    }
+                } else if (paintHit.kind === 'STROKE' && paintHit.stroke && onStrokeUpdate) {
+                    onStrokeUpdate(paintHit.stroke.id, {
                         fillColor: toolOptions.defaultFillColor,
-                        isClosed: true 
+                        isClosed: true
                     });
+                } else if (paintHit.kind === 'LOOP' && paintHit.loopPoints) {
+                    onCreateFillStroke?.(paintHit.loopPoints, paintHit.sourceStrokeIds);
                 }
             }
             return;

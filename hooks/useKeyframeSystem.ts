@@ -567,10 +567,26 @@ export const useKeyframeSystem = (totalFrames: number) => {
                         let mergedPoints: Point[] = [];
                         if (mergeType === 'APPEND_TO_END') {
                             mergedPoints = [...targetStroke.points, ...processedPoints.slice(1)];
-                            if (options.bezierAdaptive) mergedPoints = adaptJointToBezier(mergedPoints, Math.max(1, targetStroke.points.length - 1));
+                            const joinIndex = Math.max(1, targetStroke.points.length - 1);
+                            const incomingJoin = targetStroke.points[targetStroke.points.length - 1];
+                            const outgoingJoin = processedPoints[0];
+                            mergedPoints[joinIndex] = {
+                                ...mergedPoints[joinIndex],
+                                cp1: mergedPoints[joinIndex].cp1 || incomingJoin.cp1,
+                                cp2: outgoingJoin.cp2 || mergedPoints[joinIndex].cp2
+                            };
+                            if (options.bezierAdaptive) mergedPoints = adaptJointToBezier(mergedPoints, joinIndex);
                         } else {
                             mergedPoints = [...processedPoints, ...targetStroke.points.slice(1)];
-                            if (options.bezierAdaptive) mergedPoints = adaptJointToBezier(mergedPoints, Math.max(1, processedPoints.length - 1));
+                            const joinIndex = Math.max(1, processedPoints.length - 1);
+                            const incomingJoin = processedPoints[processedPoints.length - 1];
+                            const outgoingJoin = targetStroke.points[0];
+                            mergedPoints[joinIndex] = {
+                                ...mergedPoints[joinIndex],
+                                cp1: incomingJoin.cp1 || mergedPoints[joinIndex].cp1,
+                                cp2: outgoingJoin.cp2 || mergedPoints[joinIndex].cp2
+                            };
+                            if (options.bezierAdaptive) mergedPoints = adaptJointToBezier(mergedPoints, joinIndex);
                         }
                         const mergedStroke = { ...targetStroke, points: mergedPoints, isSelected: true };
                         mergedStrokeId = mergedStroke.id;
@@ -638,6 +654,52 @@ export const useKeyframeSystem = (totalFrames: number) => {
         }));
     }, []);
 
+
+    const createFillStroke = useCallback((
+        currentFrameIndex: number,
+        activeLayerId: string,
+        points: Point[],
+        fillColor: string,
+        sourceStrokeIds: string[] = []
+    ) => {
+        if (points.length < 3) return;
+        const fillStroke: Stroke = {
+            id: uuidv4(),
+            layerId: activeLayerId,
+            points,
+            isSelected: false,
+            isClosed: true,
+            color: 'transparent',
+            width: 0,
+            fillColor,
+            linkedStrokeIds: sourceStrokeIds
+        };
+
+        setKeyframes(prev => {
+            const existingFrameIdx = prev.findIndex(k => k.index === currentFrameIndex && k.layerId === activeLayerId);
+            const nextKeys = [...prev];
+            if (existingFrameIdx !== -1) {
+                const existingFrame = nextKeys[existingFrameIdx];
+                nextKeys[existingFrameIdx] = {
+                    ...existingFrame,
+                    strokes: [...existingFrame.strokes, fillStroke],
+                    type: existingFrame.type === 'HOLD' ? 'KEY' : existingFrame.type
+                };
+            } else {
+                nextKeys.push({
+                    id: uuidv4(),
+                    layerId: activeLayerId,
+                    index: currentFrameIndex,
+                    strokes: [fillStroke],
+                    motionPaths: [],
+                    easing: 'LINEAR',
+                    type: 'KEY'
+                });
+            }
+            return nextKeys;
+        });
+    }, []);
+
     const updateEasing = useCallback((id: string, easing: EasingType) => {
         setKeyframes(prev => prev.map(k => k.id === id ? { ...k, easing } : k));
     }, []);
@@ -693,6 +755,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
         reverseSelected,
         updateStrokeById,
         deleteStrokeById,
+        createFillStroke,
         updateEasing,
         createBinding,
         setFramePairBindings,
