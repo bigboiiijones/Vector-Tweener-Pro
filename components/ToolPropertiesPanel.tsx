@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { ToolType, ToolOptions, TransformMode, ProjectSettings, Stroke } from '../types';
-import { Settings2, RefreshCcw, Unlink, ScanLine, ListOrdered, Magnet, Move, RotateCw, Scaling, Spline, Merge, Wand2, Layers, Grid, Palette, PaintBucket, Camera, Video } from 'lucide-react';
+import { Settings2, RefreshCcw, Unlink, ScanLine, ListOrdered, Magnet, Move, RotateCw, Scaling, Spline, Merge, Wand2, Layers, Grid, Palette, PaintBucket, Camera, Video, Eraser } from 'lucide-react';
 
 interface ToolPropertiesPanelProps {
     currentTool: ToolType;
@@ -79,6 +79,7 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
     const setFillColor = (color: string) => setOptions({ ...options, defaultFillColor: color });
     const toggleDrawStroke = () => setOptions({ ...options, drawStroke: !options.drawStroke });
     const toggleDrawFill = () => setOptions({ ...options, drawFill: !options.drawFill });
+    const toggleBezierAdaptive = () => setOptions({ ...options, bezierAdaptive: !options.bezierAdaptive });
 
     // Canvas Settings Handlers
     const setCanvasColor = (color: string) => setProjectSettings({ ...projectSettings, canvasColor: color });
@@ -158,10 +159,29 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                             <input
                                 type="color"
                                 value={firstSelectedStroke?.fillColor || options.defaultFillColor}
-                                onChange={(e) => updateSelectedStrokes({ fillColor: e.target.value, isClosed: true })}
+                                onChange={(e) => updateSelectedStrokes({ fillColor: e.target.value })}
                                 className="w-6 h-6 rounded cursor-pointer bg-transparent border-none"
                             />
                         </div>
+
+                        <label className="flex items-center justify-between text-[10px] text-blue-300">
+                            <span>Remove Stroke</span>
+                            <input
+                                type="checkbox"
+                                checked={(firstSelectedStroke?.color === 'transparent') || (firstSelectedStroke?.width || 0) <= 0}
+                                onChange={(e) => updateSelectedStrokes(e.target.checked ? { color: 'transparent', width: 0 } : { color: options.defaultColor, width: Math.max(1, options.defaultWidth) })}
+                                className="w-3 h-3 rounded bg-gray-700 border-gray-600"
+                            />
+                        </label>
+                        <label className="flex items-center justify-between text-[10px] text-blue-300">
+                            <span>Remove Fill</span>
+                            <input
+                                type="checkbox"
+                                checked={!firstSelectedStroke?.fillColor || firstSelectedStroke.fillColor === 'transparent'}
+                                onChange={(e) => updateSelectedStrokes(e.target.checked ? { fillColor: undefined } : { fillColor: options.defaultFillColor })}
+                                className="w-3 h-3 rounded bg-gray-700 border-gray-600"
+                            />
+                        </label>
                     </div>
                 )}
 
@@ -223,6 +243,17 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                         >
                             <Merge size={14} />
                             <span>Auto-Merge</span>
+                        </button>
+                        <button 
+                            onClick={toggleBezierAdaptive}
+                            className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
+                                options.bezierAdaptive 
+                                ? 'bg-purple-900/30 border-purple-500 text-purple-200' 
+                                : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
+                            }`}
+                        >
+                            <Spline size={14} />
+                            <span>Bezier Adapt</span>
                         </button>
                     </>
                 )}
@@ -355,6 +386,19 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                         </button>
 
                         <button 
+                            onClick={toggleBezierAdaptive}
+                            className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
+                                options.bezierAdaptive 
+                                ? 'bg-purple-900/30 border-purple-500 text-purple-200' 
+                                : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
+                            }`}
+                            title="Preserve smooth bezier curvature when snapping/closing/merging"
+                        >
+                            <Spline size={14} />
+                            <span>Bezier Adapt</span>
+                        </button>
+
+                        <button 
                             onClick={toggleAutoClose}
                             className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
                                 options.autoClose 
@@ -412,6 +456,31 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                                 onChange={(e) => setGapClosing(parseInt(e.target.value))}
                                 className="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
                             />
+                        </div>
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-[10px] text-gray-400">Fill Color</span>
+                                <input
+                                    type="color"
+                                    value={options.defaultFillColor}
+                                    onChange={(e) => setFillColor(e.target.value)}
+                                    className="w-5 h-5 rounded cursor-pointer bg-transparent border-none"
+                                />
+                            </div>
+                            <div className="flex gap-1 bg-gray-900/50 p-1 rounded">
+                                <button
+                                    onClick={() => setOptions({ ...options, paintBucketMode: 'FILL' })}
+                                    className={`flex-1 py-1 rounded text-[10px] font-bold transition-colors ${options.paintBucketMode === 'FILL' ? 'bg-amber-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+                                >
+                                    <PaintBucket size={12} className="inline mr-1"/> Fill
+                                </button>
+                                <button
+                                    onClick={() => setOptions({ ...options, paintBucketMode: 'ERASE' })}
+                                    className={`flex-1 py-1 rounded text-[10px] font-bold transition-colors ${options.paintBucketMode === 'ERASE' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+                                >
+                                    <Eraser size={12} className="inline mr-1"/> Erase
+                                </button>
+                            </div>
                         </div>
                         <button onClick={() => setOptions({ ...options, crossLayerPainting: !options.crossLayerPainting })}
                             className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${options.crossLayerPainting ? 'bg-indigo-900/30 border-indigo-500 text-indigo-200' : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'}`}>
