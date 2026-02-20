@@ -705,7 +705,6 @@ export const useKeyframeSystem = (totalFrames: number) => {
             }
             return nextKeys;
         });
-        return fillStroke.id;
     }, []);
 
 
@@ -733,7 +732,6 @@ export const useKeyframeSystem = (totalFrames: number) => {
             }
             return next;
         });
-        return fillStroke.id;
     }, []);
 
     const replaceCompositeFrameStrokes = useCallback((currentFrameIndex: number, strokes: Stroke[]) => {
@@ -769,7 +767,6 @@ export const useKeyframeSystem = (totalFrames: number) => {
             });
             return next;
         });
-        return fillStroke.id;
     }, []);
 
     const updateEasing = useCallback((id: string, easing: EasingType) => {
