@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { ToolType, ToolOptions, TransformMode, ProjectSettings, Stroke } from '../types';
-import { Settings2, RefreshCcw, Unlink, ScanLine, ListOrdered, Magnet, Move, RotateCw, Scaling, Spline, Merge, Wand2, Layers, Grid, Palette, PaintBucket, Camera, Video } from 'lucide-react';
+import { Settings2, RefreshCcw, Unlink, ScanLine, ListOrdered, Magnet, Move, RotateCw, Scaling, Spline, Merge, Wand2, Layers, Grid, Palette, PaintBucket, Camera, Video, Eraser } from 'lucide-react';
 
 interface ToolPropertiesPanelProps {
     currentTool: ToolType;
@@ -30,6 +30,11 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
     const isPaintTool = currentTool === ToolType.PAINT_BUCKET;
     const hasSelection = selectedStrokeIds.size > 0;
 
+    const toValidHexColor = (color: string | undefined, fallback: string) => {
+        if (!color) return fallback;
+        return /^#[0-9a-fA-F]{6}$/.test(color) ? color : fallback;
+    };
+
     // Local state for selection properties to avoid jitter
     const [selColor, setSelColor] = useState(options.defaultColor);
     const [selWidth, setSelWidth] = useState(options.defaultWidth);
@@ -39,7 +44,7 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
     // Sync local state when selection changes
     useEffect(() => {
         if (firstSelectedStroke) {
-            setSelColor(firstSelectedStroke.color || options.defaultColor);
+            setSelColor(toValidHexColor(firstSelectedStroke.color, options.defaultColor));
             setSelWidth(firstSelectedStroke.width || options.defaultWidth);
             setSelTaperStart(firstSelectedStroke.taperStart || 0);
             setSelTaperEnd(firstSelectedStroke.taperEnd || 0);
@@ -79,6 +84,10 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
     const setFillColor = (color: string) => setOptions({ ...options, defaultFillColor: color });
     const toggleDrawStroke = () => setOptions({ ...options, drawStroke: !options.drawStroke });
     const toggleDrawFill = () => setOptions({ ...options, drawFill: !options.drawFill });
+    const toggleBezierAdaptive = () => setOptions({ ...options, bezierAdaptive: !options.bezierAdaptive });
+    const toggleCloseCreatesFill = () => setOptions({ ...options, closeCreatesFill: !options.closeCreatesFill });
+    const toggleTransformEditAllLayers = () => setOptions({ ...options, transformEditAllLayers: !options.transformEditAllLayers });
+    const toggleBindLinkedFillsOnTransform = () => setOptions({ ...options, bindLinkedFillsOnTransform: !options.bindLinkedFillsOnTransform });
 
     // Canvas Settings Handlers
     const setCanvasColor = (color: string) => setProjectSettings({ ...projectSettings, canvasColor: color });
@@ -108,7 +117,7 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                             <span className="text-[10px] text-blue-200 uppercase font-bold">Selected ({selectedStrokeIds.size})</span>
                             <input 
                                 type="color" 
-                                value={selColor}
+                                value={toValidHexColor(selColor, options.defaultColor)}
                                 onChange={(e) => handleSelColorChange(e.target.value)}
                                 className="w-6 h-6 rounded cursor-pointer bg-transparent border-none"
                             />
@@ -157,17 +166,49 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                             <span className="text-[10px] text-blue-300">Fill Color</span>
                             <input
                                 type="color"
-                                value={firstSelectedStroke?.fillColor || options.defaultFillColor}
-                                onChange={(e) => updateSelectedStrokes({ fillColor: e.target.value, isClosed: true })}
+                                value={toValidHexColor(firstSelectedStroke?.fillColor, options.defaultFillColor)}
+                                onChange={(e) => updateSelectedStrokes({ fillColor: e.target.value })}
                                 className="w-6 h-6 rounded cursor-pointer bg-transparent border-none"
                             />
                         </div>
+
+                        <label className="flex items-center justify-between text-[10px] text-blue-300">
+                            <span>Stroke Enabled</span>
+                            <input
+                                type="checkbox"
+                                checked={!((firstSelectedStroke?.color === 'transparent') || (firstSelectedStroke?.width || 0) <= 0)}
+                                onChange={(e) => updateSelectedStrokes(e.target.checked
+                                    ? { color: toValidHexColor(firstSelectedStroke?.color, options.defaultColor), width: Math.max(1, firstSelectedStroke?.width || options.defaultWidth) }
+                                    : { color: 'transparent', width: 0 })}
+                                className="w-3 h-3 rounded bg-gray-700 border-gray-600"
+                            />
+                        </label>
+                        <label className="flex items-center justify-between text-[10px] text-blue-300">
+                            <span>Bind Fill to Linked Lines</span>
+                            <input
+                                type="checkbox"
+                                checked={!!firstSelectedStroke?.bindToLinkedStrokes}
+                                onChange={(e) => updateSelectedStrokes({ bindToLinkedStrokes: e.target.checked })}
+                                className="w-3 h-3 rounded bg-gray-700 border-gray-600"
+                            />
+                        </label>
+                        <label className="flex items-center justify-between text-[10px] text-blue-300">
+                            <span>Fill Enabled</span>
+                            <input
+                                type="checkbox"
+                                checked={!!(firstSelectedStroke?.fillColor && firstSelectedStroke.fillColor !== 'transparent')}
+                                onChange={(e) => updateSelectedStrokes(e.target.checked
+                                    ? { fillColor: toValidHexColor(firstSelectedStroke?.fillColor, options.defaultFillColor) }
+                                    : { fillColor: undefined })}
+                                className="w-3 h-3 rounded bg-gray-700 border-gray-600"
+                            />
+                        </label>
                     </div>
                 )}
 
                 {/* TRANSFORM MODES */}
                 {isTransformTool && (
-                     <div className="grid grid-cols-3 gap-1 mb-2">
+                     <div className="grid grid-cols-4 gap-1 mb-2">
                          <button 
                             onClick={() => setOptions({...options, transformMode: TransformMode.TRANSLATE})}
                             className={`p-2 rounded flex justify-center ${options.transformMode === TransformMode.TRANSLATE ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
@@ -183,9 +224,57 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                             className={`p-2 rounded flex justify-center ${options.transformMode === TransformMode.SCALE ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
                             title="Scale Selection"
                          ><Scaling size={14}/></button>
+                         <button 
+                            onClick={() => setOptions({...options, transformMode: TransformMode.SKEW})}
+                            className={`p-2 rounded flex justify-center text-[10px] font-bold ${options.transformMode === TransformMode.SKEW ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                            title="Skew Selection"
+                         >SK</button>
                      </div>
                 )}
 
+
+                {isTransformTool && (
+                    <button
+                        onClick={toggleTransformEditAllLayers}
+                        className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
+                            options.transformEditAllLayers
+                            ? 'bg-indigo-900/30 border-indigo-500 text-indigo-200'
+                            : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
+                        }`}
+                        title="Edit across all visible layers or only active layer"
+                    >
+                        <Layers size={14} />
+                        <span>{options.transformEditAllLayers ? 'Edit: All Layers' : 'Edit: Active Layer'}</span>
+                    </button>
+                )}
+                {isTransformTool && (
+                    <button
+                        onClick={toggleSnapping}
+                        className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
+                            options.snappingEnabled
+                            ? 'bg-yellow-900/30 border-yellow-500 text-yellow-200'
+                            : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
+                        }`}
+                        title="Snap selected points while transforming"
+                    >
+                        <Magnet size={14} />
+                        <span>Cling / Snap</span>
+                    </button>
+                )}
+                {isTransformTool && (
+                    <button
+                        onClick={toggleBindLinkedFillsOnTransform}
+                        className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
+                            options.bindLinkedFillsOnTransform
+                            ? 'bg-emerald-900/30 border-emerald-500 text-emerald-200'
+                            : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
+                        }`}
+                        title="Move linked fills when transforming source line art"
+                    >
+                        <PaintBucket size={14} />
+                        <span>Bind Linked Fills</span>
+                    </button>
+                )}
                 {/* BEZIER TOGGLE */}
                 {isTransformTool && (
                      <button 
@@ -223,6 +312,30 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                         >
                             <Merge size={14} />
                             <span>Auto-Merge</span>
+                        </button>
+
+                        <button 
+                            onClick={toggleCloseCreatesFill}
+                            className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
+                                options.closeCreatesFill 
+                                ? 'bg-emerald-900/30 border-emerald-500 text-emerald-200' 
+                                : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
+                            }`}
+                            title="When transform-closing, create or preserve fill"
+                        >
+                            <PaintBucket size={14} />
+                            <span>Create Fill on Close</span>
+                        </button>
+                        <button 
+                            onClick={toggleBezierAdaptive}
+                            className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
+                                options.bezierAdaptive 
+                                ? 'bg-purple-900/30 border-purple-500 text-purple-200' 
+                                : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
+                            }`}
+                        >
+                            <Spline size={14} />
+                            <span>Bezier Adapt</span>
                         </button>
                     </>
                 )}
@@ -355,6 +468,19 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                         </button>
 
                         <button 
+                            onClick={toggleBezierAdaptive}
+                            className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
+                                options.bezierAdaptive 
+                                ? 'bg-purple-900/30 border-purple-500 text-purple-200' 
+                                : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
+                            }`}
+                            title="Preserve smooth bezier curvature when snapping/closing/merging"
+                        >
+                            <Spline size={14} />
+                            <span>Bezier Adapt</span>
+                        </button>
+
+                        <button 
                             onClick={toggleAutoClose}
                             className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
                                 options.autoClose 
@@ -412,6 +538,31 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                                 onChange={(e) => setGapClosing(parseInt(e.target.value))}
                                 className="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
                             />
+                        </div>
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-[10px] text-gray-400">Fill Color</span>
+                                <input
+                                    type="color"
+                                    value={options.defaultFillColor}
+                                    onChange={(e) => setFillColor(e.target.value)}
+                                    className="w-5 h-5 rounded cursor-pointer bg-transparent border-none"
+                                />
+                            </div>
+                            <div className="flex gap-1 bg-gray-900/50 p-1 rounded">
+                                <button
+                                    onClick={() => setOptions({ ...options, paintBucketMode: 'FILL' })}
+                                    className={`flex-1 py-1 rounded text-[10px] font-bold transition-colors ${options.paintBucketMode === 'FILL' ? 'bg-amber-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+                                >
+                                    <PaintBucket size={12} className="inline mr-1"/> Fill
+                                </button>
+                                <button
+                                    onClick={() => setOptions({ ...options, paintBucketMode: 'ERASE' })}
+                                    className={`flex-1 py-1 rounded text-[10px] font-bold transition-colors ${options.paintBucketMode === 'ERASE' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+                                >
+                                    <Eraser size={12} className="inline mr-1"/> Erase
+                                </button>
+                            </div>
                         </div>
                         <button onClick={() => setOptions({ ...options, crossLayerPainting: !options.crossLayerPainting })}
                             className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${options.crossLayerPainting ? 'bg-indigo-900/30 border-indigo-500 text-indigo-200' : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'}`}>

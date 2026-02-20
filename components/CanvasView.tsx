@@ -27,6 +27,7 @@ interface CanvasViewProps {
     showBezierHandles: boolean;
     transformSelection: any[]; 
     transformPreviews: Map<string, Stroke>; 
+    transformBounds?: { x: number; y: number; w: number; h: number } | null;
     snapPoint: Point | null; 
     onPointerDown: (e: React.MouseEvent | React.TouchEvent) => void;
     onPointerMove: (e: React.MouseEvent | React.TouchEvent) => void;
@@ -189,6 +190,7 @@ export const CanvasView: React.FC<CanvasViewProps> = React.memo(({
     showBezierHandles,
     transformSelection,
     transformPreviews,
+    transformBounds,
     snapPoint, 
     onPointerDown,
     onPointerMove,
@@ -222,28 +224,7 @@ export const CanvasView: React.FC<CanvasViewProps> = React.memo(({
         return map;
     }, [transformSelection]);
 
-    const transformBox = useMemo(() => {
-        if (!transformSelection || transformSelection.length === 0) return null;
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        let count = 0;
-
-        transformSelection.forEach((sel: any) => {
-            const s = displayStrokes.find(str => str.id === sel.strokeId);
-            if (s) {
-                sel.pointIndices.forEach((idx: number) => {
-                    const p = s.points[idx];
-                    if (p.x < minX) minX = p.x;
-                    if (p.x > maxX) maxX = p.x;
-                    if (p.y < minY) minY = p.y;
-                    if (p.y > maxY) maxY = p.y;
-                    count++;
-                });
-            }
-        });
-
-        if (count < 2) return null; 
-        return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
-    }, [transformSelection, displayStrokes]);
+    const transformBox = transformBounds || null;
 
     // Calculate Camera Box position relative to Canvas
     // Camera Transform (x, y) is the center of the camera view
@@ -260,6 +241,13 @@ export const CanvasView: React.FC<CanvasViewProps> = React.memo(({
 
     const bgColor = projectSettings.canvasTransparent ? 'transparent' : projectSettings.canvasColor;
 
+
+    const transformOuterBox = transformBox ? {
+        x: transformBox.x - 26,
+        y: transformBox.y - 26,
+        w: transformBox.w + 52,
+        h: transformBox.h + 52
+    } : null;
     return (
         <div 
             className="w-full h-full cursor-crosshair relative overflow-hidden bg-[#101010]"
@@ -331,21 +319,21 @@ export const CanvasView: React.FC<CanvasViewProps> = React.memo(({
 
                 {/* Onion Skins (Filtered by visibility too if strict, but maybe helpful reference) */}
                 {showOnion && prevOnion && prevOnion.strokes.filter(s => visibleLayerIds.has(s.layerId)).map((s, i) => (
-                    <g key={`onion-prev-${s.id}`}>
+                    <g key={`onion-prev-${s.layerId}-${s.id}-${i}`}>
                         <path d={toPathString(s.points)} fill="none" stroke="rgba(0, 255, 0, 0.15)" strokeWidth="4" />
                         <path d={toPathString(s.points)} fill="none" stroke="rgba(0, 255, 0, 0.4)" strokeWidth="1" strokeDasharray="2,2" />
                     </g>
                 ))}
-                {showOnion && nextOnion && nextOnion.strokes.filter(s => visibleLayerIds.has(s.layerId)).map(s => (
-                     <path key={`onion-next-${s.id}`} d={toPathString(s.points)} fill="none" stroke="rgba(255, 0, 0, 0.15)" strokeWidth="2" />
+                {showOnion && nextOnion && nextOnion.strokes.filter(s => visibleLayerIds.has(s.layerId)).map((s, i) => (
+                     <path key={`onion-next-${s.layerId}-${s.id}-${i}`} d={toPathString(s.points)} fill="none" stroke="rgba(255, 0, 0, 0.15)" strokeWidth="2" />
                 ))}
 
                 {/* Correspondence Overlay */}
                 {showCorresOverlay && corresPrev && corresNext && (
                     <>
-                        {corresPrev.strokes.filter(s => visibleLayerIds.has(s.layerId)).map(s => (
+                        {corresPrev.strokes.filter(s => visibleLayerIds.has(s.layerId)).map((s, i) => (
                             <path 
-                                key={`corres-green-${s.id}`} 
+                                key={`corres-green-${s.layerId}-${s.id}-${i}`} 
                                 d={toPathString(s.points)} 
                                 fill="none" 
                                 stroke={corresSelection.has(s.id) ? "#ffffff" : "#22c55e"} 
@@ -353,9 +341,9 @@ export const CanvasView: React.FC<CanvasViewProps> = React.memo(({
                                 opacity={corresSelection.has(s.id) ? 1 : 0.4}
                             />
                         ))}
-                        {corresNext.strokes.filter(s => visibleLayerIds.has(s.layerId)).map(s => (
+                        {corresNext.strokes.filter(s => visibleLayerIds.has(s.layerId)).map((s, i) => (
                              <path 
-                                key={`corres-red-${s.id}`} 
+                                key={`corres-red-${s.layerId}-${s.id}-${i}`} 
                                 d={toPathString(s.points)} 
                                 fill="none" 
                                 stroke={corresSelection.has(s.id) ? "#ffffff" : "#ef4444"} 
@@ -367,14 +355,14 @@ export const CanvasView: React.FC<CanvasViewProps> = React.memo(({
                 )}
 
                 {/* Main Strokes Rendered via Memoized Component */}
-                {displayStrokes.map((stroke) => {
+                {displayStrokes.map((stroke, index) => {
                     const isSelected = selectedStrokeIds.has(stroke.id) || (showCorresOverlay && corresSelection.has(stroke.id));
                     const transformIndices = transformIndicesMap.get(stroke.id);
                     const isTransforming = transformIndices !== undefined;
 
                     return (
                         <MemoizedStroke 
-                            key={stroke.id}
+                            key={`${stroke.layerId}-${stroke.id}-${index}`}
                             stroke={stroke}
                             isSelected={isSelected}
                             isTransforming={isTransforming}
@@ -388,18 +376,58 @@ export const CanvasView: React.FC<CanvasViewProps> = React.memo(({
                     );
                 })}
 
-                {/* Transform Bounding Box */}
-                {transformBox && currentTool === ToolType.TRANSFORM && (
-                    <rect 
-                        x={transformBox.x - 5} 
-                        y={transformBox.y - 5} 
-                        width={transformBox.w + 10} 
-                        height={transformBox.h + 10} 
-                        fill="none"
-                        stroke="#3b82f6" 
-                        strokeWidth="1" 
-                        strokeDasharray="4"
-                    />
+                {/* Unified Transform Bounding Controls */}
+                {transformBox && transformOuterBox && currentTool === ToolType.TRANSFORM && (
+                    <g>
+                        <rect
+                            x={transformBox.x}
+                            y={transformBox.y}
+                            width={transformBox.w}
+                            height={transformBox.h}
+                            fill="none"
+                            stroke="#f87171"
+                            strokeWidth="1"
+                        />
+                        <rect
+                            x={transformOuterBox.x}
+                            y={transformOuterBox.y}
+                            width={transformOuterBox.w}
+                            height={transformOuterBox.h}
+                            fill="none"
+                            stroke="#f87171"
+                            strokeWidth="1"
+                            strokeOpacity="0.8"
+                        />
+                        {[
+                            [transformBox.x, transformBox.y],
+                            [transformBox.x + transformBox.w / 2, transformBox.y],
+                            [transformBox.x + transformBox.w, transformBox.y],
+                            [transformBox.x + transformBox.w, transformBox.y + transformBox.h / 2],
+                            [transformBox.x + transformBox.w, transformBox.y + transformBox.h],
+                            [transformBox.x + transformBox.w / 2, transformBox.y + transformBox.h],
+                            [transformBox.x, transformBox.y + transformBox.h],
+                            [transformBox.x, transformBox.y + transformBox.h / 2]
+                        ].map((pt, i) => (
+                            <circle key={`scale-h-${i}`} cx={pt[0]} cy={pt[1]} r={6} fill="none" stroke="#ef4444" strokeWidth="2" />
+                        ))}
+                        {[
+                            [transformOuterBox.x, transformOuterBox.y],
+                            [transformOuterBox.x + transformOuterBox.w / 2, transformOuterBox.y],
+                            [transformOuterBox.x + transformOuterBox.w, transformOuterBox.y],
+                            [transformOuterBox.x + transformOuterBox.w, transformOuterBox.y + transformOuterBox.h / 2],
+                            [transformOuterBox.x + transformOuterBox.w, transformOuterBox.y + transformOuterBox.h],
+                            [transformOuterBox.x + transformOuterBox.w / 2, transformOuterBox.y + transformOuterBox.h],
+                            [transformOuterBox.x, transformOuterBox.y + transformOuterBox.h],
+                            [transformOuterBox.x, transformOuterBox.y + transformOuterBox.h / 2]
+                        ].map((pt, i) => (
+                            <circle key={`outer-h-${i}`} cx={pt[0]} cy={pt[1]} r={10} fill="none" stroke="#ef4444" strokeWidth="2" />
+                        ))}
+                        <g stroke="#ef4444" strokeWidth="1.5">
+                            <line x1={transformBox.x + transformBox.w / 2 - 10} y1={transformBox.y + transformBox.h / 2} x2={transformBox.x + transformBox.w / 2 + 10} y2={transformBox.y + transformBox.h / 2} />
+                            <line x1={transformBox.x + transformBox.w / 2} y1={transformBox.y + transformBox.h / 2 - 10} x2={transformBox.x + transformBox.w / 2} y2={transformBox.y + transformBox.h / 2 + 10} />
+                            <circle cx={transformBox.x + transformBox.w / 2} cy={transformBox.y + transformBox.h / 2} r={3} fill="none" />
+                        </g>
+                    </g>
                 )}
 
                 {/* Connection Line */}

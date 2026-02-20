@@ -41,6 +41,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
     const [status, setStatus] = useState('');
     const [exportType, setExportType] = useState<'IMAGE' | 'SEQUENCE' | 'VIDEO'>('IMAGE');
     const [format, setFormat] = useState<'PNG' | 'JPG' | 'TGA' | 'WEBM' | 'MP4' | 'AVI' | 'MOV'>('PNG');
+    const [includeInbetweenFrames, setIncludeInbetweenFrames] = useState(true);
 
     // Helper to render a specific frame to a canvas
     const renderFrameToCanvas = async (frameIndex: number, canvas: HTMLCanvasElement) => {
@@ -57,18 +58,23 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
         }
 
         // Get Content
-        const strokes = getFrameContent(frameIndex, 'INDEX', layers);
+        const visibleLayerIds = new Set(layers.filter(l => l.type === 'VECTOR' && l.isVisible).map(l => l.id));
+        const hasVisibleLayerKeyframe = keyframes.some(k => k.index === frameIndex && visibleLayerIds.has(k.layerId));
+        const strokes = includeInbetweenFrames || hasVisibleLayerKeyframe
+            ? getFrameContent(frameIndex, 'INDEX', layers).filter(s => visibleLayerIds.has(s.layerId))
+            : [];
         const cameraTransform = getCameraTransform(frameIndex);
 
         const camW = projectSettings.cameraResolution.width;
         const camH = projectSettings.cameraResolution.height;
+        const canvasCenterX = projectSettings.canvasSize.width / 2;
+        const canvasCenterY = projectSettings.canvasSize.height / 2;
         
         ctx.save();
         ctx.translate(camW / 2, camH / 2);
-        
         ctx.scale(cameraTransform.zoom, cameraTransform.zoom);
         ctx.rotate(-cameraTransform.rotation * Math.PI / 180);
-        ctx.translate(-cameraTransform.x, -cameraTransform.y); // Move camera center to origin
+        ctx.translate(-(canvasCenterX + cameraTransform.x), -(canvasCenterY + cameraTransform.y));
 
         for (const stroke of strokes) {
             if (!stroke.points || stroke.points.length < 2) continue;
@@ -322,6 +328,18 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
                                 </button>
                             </>
                         )}
+                    </div>
+                    <div className="mt-3 flex items-center gap-2">
+                        <input
+                            id="include-inbetween"
+                            type="checkbox"
+                            checked={includeInbetweenFrames}
+                            onChange={(e) => setIncludeInbetweenFrames(e.target.checked)}
+                            className="rounded border-gray-600 bg-gray-800 text-blue-500"
+                        />
+                        <label htmlFor="include-inbetween" className="text-xs text-gray-300">
+                            Render in-between / tweened frames (off = only explicit keyframes render strokes)
+                        </label>
                     </div>
                 </div>
 
