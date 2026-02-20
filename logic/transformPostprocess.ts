@@ -64,6 +64,7 @@ const adaptJointToBezier = (points: Point[], joinIndex: number) => {
 export const postProcessTransformedStrokes = (
   strokes: Stroke[],
   options: { autoClose: boolean; autoMerge: boolean; bezierAdaptive: boolean; closeCreatesFill: boolean; fillColor: string; closeThreshold: number }
+  options: { autoClose: boolean; autoMerge: boolean; bezierAdaptive: boolean; closeThreshold: number }
 ): Stroke[] => {
   let next = [...strokes];
 
@@ -78,12 +79,15 @@ export const postProcessTransformedStrokes = (
           adaptClosedSeamToBezier(closedPoints);
           adaptJointToBezier(closedPoints, Math.max(1, closedPoints.length - 2));
           adaptJointToBezier(closedPoints, 1);
+          adaptJointToBezier(closedPoints, 0);
+          adaptJointToBezier(closedPoints, closedPoints.length - 2);
         }
 
         return {
           ...stroke,
           isClosed: true,
           fillColor: options.closeCreatesFill ? (stroke.fillColor || options.fillColor) : stroke.fillColor,
+          fillColor: stroke.fillColor || '#000000',
           points: closedPoints
         };
       }
