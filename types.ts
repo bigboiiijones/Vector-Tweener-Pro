@@ -109,6 +109,9 @@ export interface ToolOptions {
     autoMatchStrategy: AutoMatchStrategy;
     snappingEnabled: boolean;
     crossLayerSnapping: boolean; // New: Allow vectors to snap across different layers
+    crossLayerPainting: boolean;
+    crossGroupPainting: boolean;
+    closeCreatesFill: boolean;
     smoothingFactor: number; 
     showBezierHandles: boolean;
     transformMode: TransformMode;

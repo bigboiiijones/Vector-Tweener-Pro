@@ -485,7 +485,9 @@ export const useKeyframeSystem = (totalFrames: number) => {
             taperStart: options.defaultTaperStart,
             taperEnd: options.defaultTaperEnd,
             isClosed: isClosed || [ToolType.RECTANGLE, ToolType.CIRCLE, ToolType.TRIANGLE, ToolType.STAR].includes(tool),
-            fillColor: options.drawFill ? options.defaultFillColor : undefined
+            fillColor: (options.drawFill || ((isClosed || [ToolType.RECTANGLE, ToolType.CIRCLE, ToolType.TRIANGLE, ToolType.STAR].includes(tool)) && options.closeCreatesFill))
+                ? options.defaultFillColor
+                : undefined
         };
         
         let mergedStrokeId: string | undefined = undefined;
@@ -591,6 +593,25 @@ export const useKeyframeSystem = (totalFrames: number) => {
         setKeyframes(prev => prev.map(k => k.id === id ? { ...k, easing } : k));
     }, []);
 
+
+    const updateStrokeById = useCallback((currentFrameIndex: number, strokeId: string, updates: Partial<Stroke>) => {
+        setKeyframes(prev => prev.map(k => {
+            if (k.index !== currentFrameIndex) return k;
+
+            let changed = false;
+            const nextStrokes = k.strokes.map(s => {
+                if (s.id === strokeId) {
+                    changed = true;
+                    return { ...s, ...updates };
+                }
+                return s;
+            });
+
+            if (!changed) return k;
+            return { ...k, strokes: nextStrokes, type: k.type === 'HOLD' ? 'KEY' : k.type };
+        }));
+    }, []);
+
     // Delete Frames logic - now accepts list of Keyframe IDs to delete
     const deleteFrames = useCallback((keyframeIds: Set<string>) => {
         setKeyframes(prev => prev.filter(k => !keyframeIds.has(k.id)));
@@ -621,6 +642,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
         commitStroke,
         deleteSelected,
         reverseSelected,
+        updateStrokeById,
         updateEasing,
         createBinding,
         setFramePairBindings,

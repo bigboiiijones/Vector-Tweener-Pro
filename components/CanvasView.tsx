@@ -60,7 +60,7 @@ const MemoizedStroke = React.memo(({
     activeKeyframe?: Keyframe, 
     showCorresOverlay: boolean 
 }) => {
-    const fill = stroke.isClosed ? (stroke.fillColor || "rgba(100,100,100,0.2)") : "none";
+    const fill = stroke.isClosed ? (stroke.fillColor || "none") : "none";
     
     // Determine Color
     let strokeColor = stroke.color || "#fbbf24"; 
