@@ -134,8 +134,6 @@ export const useTransformTool = (
     const selectableStrokes = transformEditAllLayers ? strokes : strokes.filter(s => s.layerId === activeLayerId);
 
 
-
-
     const getSelectionCenter = (sel: TransformSelection[], strokeSource: Stroke[]): Point | null => {
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         let has = false;
