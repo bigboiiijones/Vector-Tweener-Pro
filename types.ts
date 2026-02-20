@@ -13,6 +13,7 @@ export interface Stroke {
   isSelected?: boolean;
   center?: Point; 
   linkedStrokeIds?: string[]; 
+  bindToLinkedStrokes?: boolean;
   parents?: string[]; 
   isClosed?: boolean; 
   fillColor?: string;
@@ -98,7 +99,8 @@ export interface GroupBinding {
 export enum TransformMode {
   TRANSLATE = 'TRANSLATE',
   ROTATE = 'ROTATE',
-  SCALE = 'SCALE'
+  SCALE = 'SCALE',
+  SKEW = 'SKEW'
 }
 
 export type AutoMatchStrategy = 'INDEX' | 'SPATIAL';
@@ -126,6 +128,10 @@ export interface ToolOptions {
     drawStroke: boolean;
     drawFill: boolean;
     gapClosingDistance: number;
+    paintBucketMode: 'FILL' | 'ERASE';
+    bezierAdaptive: boolean;
+    transformEditAllLayers: boolean;
+    bindLinkedFillsOnTransform: boolean;
 }
 
 // --- Layer System Types ---

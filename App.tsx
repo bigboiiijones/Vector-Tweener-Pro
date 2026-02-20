@@ -16,6 +16,7 @@ import { useCanvasInteraction } from './hooks/useCanvasInteraction';
 import { useBindActions } from './hooks/useBindActions';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useLayers } from './hooks/useLayers';
+import { findClosedLoopFromStrokes } from './logic/paintBucket';
 
 const App: React.FC = () => {
   // --- Core State ---
@@ -53,7 +54,7 @@ const App: React.FC = () => {
       overwriteTargets: false, 
       swapTargets: false,
       autoMatchStrategy: 'INDEX',
-      snappingEnabled: true,
+      snappingEnabled: false,
       crossLayerSnapping: false,
       crossLayerPainting: true,
       crossGroupPainting: true,
@@ -71,7 +72,11 @@ const App: React.FC = () => {
       defaultFillColor: '#000000',
       drawStroke: true,
       drawFill: false,
-      gapClosingDistance: 20
+      gapClosingDistance: 20,
+      paintBucketMode: 'FILL',
+      bezierAdaptive: false,
+      transformEditAllLayers: true,
+      bindLinkedFillsOnTransform: false
   });
   
   const svgRef = useRef<SVGSVGElement>(null);
@@ -107,25 +112,34 @@ const App: React.FC = () => {
   const activeCameraTransform = tempCameraTransform || computedCameraTransform;
 
   const updateStrokes = useCallback((newStrokes: any[]) => {
-      if (activeKeyframe) {
-          activeKeyframe.strokes = newStrokes; 
-          // Re-trigger update in system via a dummy addKeyframe or direct manipulation?
-          // Since activeKeyframe is a reference to state object in hook, we need to trigger setKeyframes.
-          // Ideally use a specific update method, but addKeyframe logic handles "Update existing".
-          keyframeSystem.addKeyframe(currentFrameIndex, layerSystem.activeLayerId, layerSystem.layers); 
-      }
-  }, [activeKeyframe, currentFrameIndex, keyframeSystem, layerSystem.activeLayerId, layerSystem.layers]);
+      keyframeSystem.replaceCompositeFrameStrokes(currentFrameIndex, newStrokes);
+  }, [currentFrameIndex, keyframeSystem]);
 
   const updateSelectedStrokes = useCallback((updates: Partial<Stroke>) => {
       if (!activeKeyframe) return;
+
+      if (typeof updates.fillColor === 'string' && selection.selectedStrokeIds.size >= 2) {
+          const selected = activeKeyframe.strokes.filter(s => selection.selectedStrokeIds.has(s.id));
+          const loop = findClosedLoopFromStrokes(selected, Math.max(2, toolOptions.gapClosingDistance / Math.max(0.2, viewport.zoom)));
+          if (loop) {
+              keyframeSystem.createFillStroke(currentFrameIndex, layerSystem.activeLayerId, loop.points, updates.fillColor, loop.strokeIds);
+              return;
+          }
+      }
+
+      const nextUpdates = { ...updates };
+      if (typeof nextUpdates.fillColor === 'string' && nextUpdates.isClosed) {
+          delete nextUpdates.isClosed;
+      }
+
       const newStrokes = activeKeyframe.strokes.map(s => {
           if (selection.selectedStrokeIds.has(s.id)) {
-              return { ...s, ...updates };
+              return { ...s, ...nextUpdates };
           }
           return s;
       });
       updateStrokes(newStrokes);
-  }, [activeKeyframe, selection.selectedStrokeIds, updateStrokes]);
+  }, [activeKeyframe, selection.selectedStrokeIds, updateStrokes, toolOptions.gapClosingDistance, viewport.zoom, keyframeSystem, currentFrameIndex, layerSystem.activeLayerId]);
 
   // Fit canvas to screen
   const fitToScreen = useCallback(() => {
@@ -207,7 +221,9 @@ const App: React.FC = () => {
       tempCameraTransform: tempCameraTransform, // Added this prop
       viewport,
       setViewport,
-      onStrokeUpdate: (id, updates) => keyframeSystem.updateStrokeById(currentFrameIndex, id, updates)
+      onStrokeUpdate: (id, updates) => keyframeSystem.updateStrokeById(currentFrameIndex, id, updates),
+      onDeleteStroke: (id) => keyframeSystem.deleteStrokeById(currentFrameIndex, id, layerSystem.activeLayerId),
+      onCreateFillStroke: (points, sourceIds) => keyframeSystem.createFillStroke(currentFrameIndex, layerSystem.activeLayerId, points, toolOptions.defaultFillColor, sourceIds || [])
   });
 
   const bindActions = useBindActions({
