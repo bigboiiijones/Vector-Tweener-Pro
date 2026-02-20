@@ -393,6 +393,7 @@ const App: React.FC = () => {
                 showBezierHandles={toolOptions.showBezierHandles}
                 transformSelection={interaction.transformSelection}
                 transformPreviews={interaction.transformPreviews} 
+                transformBounds={interaction.transformBounds}
                 snapPoint={interaction.snapPoint}
                 onPointerDown={interaction.handlePointerDown}
                 onPointerMove={interaction.handlePointerMove}

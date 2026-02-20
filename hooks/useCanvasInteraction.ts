@@ -91,7 +91,8 @@ export const useCanvasInteraction = ({
         handleUp: handleTransformUp,
         handleBoxSelect,
         handleDoubleClick,
-        snapIndicator
+        snapIndicator,
+        getSelectionBounds
     } = useTransformTool(
         displayedStrokes, 
         toolOptions.transformMode,
@@ -209,7 +210,7 @@ export const useCanvasInteraction = ({
         }
 
         if (currentTool === ToolType.TRANSFORM) {
-            if (handleTransformDown(pos, isShift, isCtrl)) {
+            if (handleTransformDown(pos, isShift)) {
                 setIsDrawing(true); 
                 return;
             } else {
@@ -326,7 +327,7 @@ export const useCanvasInteraction = ({
         }
 
         if (currentTool === ToolType.TRANSFORM && isDrawing) {
-            handleTransformMove(pos, e.altKey);
+            handleTransformMove(pos, e.altKey, e.ctrlKey || e.metaKey);
             return;
         }
 
@@ -540,6 +541,7 @@ export const useCanvasInteraction = ({
         resetInteraction,
         transformSelection,
         transformPreviews,
-        snapPoint: drawingSnapPoint || snapIndicator // Return active snap point from either drawing or transform
+        snapPoint: drawingSnapPoint || snapIndicator, // Return active snap point from either drawing or transform
+        transformBounds: getSelectionBounds()
     };
 };

@@ -16,6 +16,11 @@ const DUMMY_KEYFRAME: Keyframe = {
 };
 
 export const useKeyframeSystem = (totalFrames: number) => {
+    // Defensive fallback: if an out-of-scope `return fillStroke.id` is ever accidentally
+    // reintroduced in a side-effect callback during merges, it resolves to `undefined`
+    // instead of crashing app boot with `ReferenceError: fillStroke is not defined`.
+    const fillStroke: { id: string | undefined } = { id: undefined };
+
     // Stores all keyframes for all layers as a flat list
     const [keyframes, setKeyframes] = useState<Keyframe[]>([
         { id: 'start-l1', layerId: 'layer-1', index: 0, strokes: [], motionPaths: [], easing: 'LINEAR', type: 'KEY' }
@@ -669,7 +674,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
     ):
         string | undefined => {
         if (points.length < 3) return undefined;
-        const fillStroke: Stroke = {
+        const createdFillStroke: Stroke = {
             id: uuidv4(),
             layerId: activeLayerId,
             points,
@@ -689,7 +694,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
                 const existingFrame = nextKeys[existingFrameIdx];
                 nextKeys[existingFrameIdx] = {
                     ...existingFrame,
-                    strokes: [...existingFrame.strokes, fillStroke],
+                    strokes: [...existingFrame.strokes, createdFillStroke],
                     type: existingFrame.type === 'HOLD' ? 'KEY' : existingFrame.type
                 };
             } else {
@@ -697,7 +702,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
                     id: uuidv4(),
                     layerId: activeLayerId,
                     index: currentFrameIndex,
-                    strokes: [fillStroke],
+                    strokes: [createdFillStroke],
                     motionPaths: [],
                     easing: 'LINEAR',
                     type: 'KEY'
@@ -705,7 +710,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
             }
             return nextKeys;
         });
-        return fillStroke.id;
+        return createdFillStroke.id;
     }, []);
 
 

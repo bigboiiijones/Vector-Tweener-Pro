@@ -41,6 +41,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
     const [status, setStatus] = useState('');
     const [exportType, setExportType] = useState<'IMAGE' | 'SEQUENCE' | 'VIDEO'>('IMAGE');
     const [format, setFormat] = useState<'PNG' | 'JPG' | 'TGA' | 'WEBM' | 'MP4' | 'AVI' | 'MOV'>('PNG');
+    const [includeInbetweenFrames, setIncludeInbetweenFrames] = useState(true);
 
     // Helper to render a specific frame to a canvas
     const renderFrameToCanvas = async (frameIndex: number, canvas: HTMLCanvasElement) => {
@@ -58,7 +59,10 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
 
         // Get Content
         const visibleLayerIds = new Set(layers.filter(l => l.type === 'VECTOR' && l.isVisible).map(l => l.id));
-        const strokes = getFrameContent(frameIndex, 'INDEX', layers).filter(s => visibleLayerIds.has(s.layerId));
+        const hasVisibleLayerKeyframe = keyframes.some(k => k.index === frameIndex && visibleLayerIds.has(k.layerId));
+        const strokes = includeInbetweenFrames || hasVisibleLayerKeyframe
+            ? getFrameContent(frameIndex, 'INDEX', layers).filter(s => visibleLayerIds.has(s.layerId))
+            : [];
         const cameraTransform = getCameraTransform(frameIndex);
 
         const camW = projectSettings.cameraResolution.width;
@@ -324,6 +328,18 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
                                 </button>
                             </>
                         )}
+                    </div>
+                    <div className="mt-3 flex items-center gap-2">
+                        <input
+                            id="include-inbetween"
+                            type="checkbox"
+                            checked={includeInbetweenFrames}
+                            onChange={(e) => setIncludeInbetweenFrames(e.target.checked)}
+                            className="rounded border-gray-600 bg-gray-800 text-blue-500"
+                        />
+                        <label htmlFor="include-inbetween" className="text-xs text-gray-300">
+                            Render in-between / tweened frames (off = only explicit keyframes render strokes)
+                        </label>
                     </div>
                 </div>
 
