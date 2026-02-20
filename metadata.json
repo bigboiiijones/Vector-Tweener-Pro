@@ -1,0 +1,5 @@
+{
+  "name": "VectorTweener Pro",
+  "description": "An offline, algorithmic vector animation tool inspired by CACANi. Features smart in-betweening, stroke binding, and topology-independent morphing.",
+  "requestFramePermissions": []
+}
