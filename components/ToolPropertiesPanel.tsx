@@ -30,6 +30,11 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
     const isPaintTool = currentTool === ToolType.PAINT_BUCKET;
     const hasSelection = selectedStrokeIds.size > 0;
 
+    const toValidHexColor = (color: string | undefined, fallback: string) => {
+        if (!color) return fallback;
+        return /^#[0-9a-fA-F]{6}$/.test(color) ? color : fallback;
+    };
+
     // Local state for selection properties to avoid jitter
     const [selColor, setSelColor] = useState(options.defaultColor);
     const [selWidth, setSelWidth] = useState(options.defaultWidth);
@@ -39,7 +44,7 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
     // Sync local state when selection changes
     useEffect(() => {
         if (firstSelectedStroke) {
-            setSelColor(firstSelectedStroke.color || options.defaultColor);
+            setSelColor(toValidHexColor(firstSelectedStroke.color, options.defaultColor));
             setSelWidth(firstSelectedStroke.width || options.defaultWidth);
             setSelTaperStart(firstSelectedStroke.taperStart || 0);
             setSelTaperEnd(firstSelectedStroke.taperEnd || 0);
@@ -112,7 +117,7 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                             <span className="text-[10px] text-blue-200 uppercase font-bold">Selected ({selectedStrokeIds.size})</span>
                             <input 
                                 type="color" 
-                                value={selColor}
+                                value={toValidHexColor(selColor, options.defaultColor)}
                                 onChange={(e) => handleSelColorChange(e.target.value)}
                                 className="w-6 h-6 rounded cursor-pointer bg-transparent border-none"
                             />
@@ -161,7 +166,7 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                             <span className="text-[10px] text-blue-300">Fill Color</span>
                             <input
                                 type="color"
-                                value={firstSelectedStroke?.fillColor || options.defaultFillColor}
+                                value={toValidHexColor(firstSelectedStroke?.fillColor, options.defaultFillColor)}
                                 onChange={(e) => updateSelectedStrokes({ fillColor: e.target.value })}
                                 className="w-6 h-6 rounded cursor-pointer bg-transparent border-none"
                             />
@@ -172,7 +177,9 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                             <input
                                 type="checkbox"
                                 checked={(firstSelectedStroke?.color === 'transparent') || (firstSelectedStroke?.width || 0) <= 0}
-                                onChange={(e) => updateSelectedStrokes(e.target.checked ? { color: 'transparent', width: 0 } : { color: options.defaultColor, width: Math.max(1, options.defaultWidth) })}
+                                onChange={(e) => updateSelectedStrokes(e.target.checked
+                                    ? { color: 'transparent', width: 0 }
+                                    : { color: toValidHexColor(firstSelectedStroke?.color, options.defaultColor), width: Math.max(1, firstSelectedStroke?.width || options.defaultWidth) })}
                                 className="w-3 h-3 rounded bg-gray-700 border-gray-600"
                             />
                         </label>
@@ -189,8 +196,10 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                             <span>Remove Fill</span>
                             <input
                                 type="checkbox"
-                                checked={!firstSelectedStroke?.fillColor || firstSelectedStroke.fillColor === 'transparent'}
-                                onChange={(e) => updateSelectedStrokes(e.target.checked ? { fillColor: undefined } : { fillColor: options.defaultFillColor })}
+                                checked={!(firstSelectedStroke?.fillColor && firstSelectedStroke.fillColor !== 'transparent')}
+                                onChange={(e) => updateSelectedStrokes(e.target.checked
+                                    ? { fillColor: undefined }
+                                    : { fillColor: toValidHexColor(firstSelectedStroke?.fillColor, options.defaultFillColor) })}
                                 className="w-3 h-3 rounded bg-gray-700 border-gray-600"
                             />
                         </label>
