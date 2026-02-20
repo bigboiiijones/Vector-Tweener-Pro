@@ -42,7 +42,9 @@ export const useTransformTool = (
     mode: TransformMode,
     snappingEnabled: boolean,
     activeLayerId: string,
-    crossLayerSnapping: boolean
+    crossLayerSnapping: boolean,
+    transformEditAllLayers: boolean,
+    bindLinkedFillsOnTransform: boolean
 ) => {
     const [selection, setSelection] = useState<TransformSelection[]>([]);
     const [dragStart, setDragStart] = useState<Point | null>(null);
@@ -53,6 +55,11 @@ export const useTransformTool = (
     
     // Track which specific point (if any) is being used as the drag anchor for snapping
     const [dragAnchor, setDragAnchor] = useState<{strokeId: string, idx: number, initialPos: Point} | null>(null);
+
+    const selectableStrokes = transformEditAllLayers
+        ? strokes
+        : strokes.filter(s => s.layerId === activeLayerId);
+
 
     const updateCentroid = (sel: TransformSelection[], strokeSource: Stroke[]) => {
         const allSelectedPoints: Point[] = [];
@@ -135,8 +142,8 @@ export const useTransformTool = (
         // 2. HIT TEST: VERTICES
         if (!bestHit) {
             // Check all strokes
-            for (let i = strokes.length - 1; i >= 0; i--) {
-                const stroke = strokes[i];
+            for (let i = selectableStrokes.length - 1; i >= 0; i--) {
+                const stroke = selectableStrokes[i];
                 if (!strokeBoundsHit(stroke, pos, POINT_RADIUS + 5)) continue; 
 
                 stroke.points.forEach((p, idx) => {
@@ -200,6 +207,24 @@ export const useTransformTool = (
                 }
             }
             
+            if (bindLinkedFillsOnTransform) {
+                const selectedIds = new Set(newSelection.map(s => s.strokeId));
+                const linkedFillSelections: TransformSelection[] = [];
+                strokes.forEach(st => {
+                    if (!st.bindToLinkedStrokes || !st.linkedStrokeIds || st.linkedStrokeIds.length === 0) return;
+                    if (st.linkedStrokeIds.some(id => selectedIds.has(id))) {
+                        linkedFillSelections.push({ strokeId: st.id, pointIndices: new Set(st.points.map((_, idx) => idx)) });
+                    }
+                });
+                if (linkedFillSelections.length > 0) {
+                    const existingIds = new Set(newSelection.map(sel => sel.strokeId));
+                    linkedFillSelections.forEach(sel => {
+                        if (!existingIds.has(sel.strokeId)) newSelection.push(sel);
+                    });
+                    setSelection(newSelection);
+                }
+            }
+
             setDragStart(pos);
             const selectedIds = new Set(newSelection.map(s => s.strokeId));
             const relevantStrokes = strokes.filter(s => selectedIds.has(s.id));
@@ -227,8 +252,8 @@ export const useTransformTool = (
 
         // 4. HIT TEST: STROKE BODY (Select new stroke)
         if (!isShift) {
-             for (let i = strokes.length - 1; i >= 0; i--) {
-                 const stroke = strokes[i];
+             for (let i = selectableStrokes.length - 1; i >= 0; i--) {
+                 const stroke = selectableStrokes[i];
                  if (!strokeBoundsHit(stroke, pos, 15)) continue;
 
                  const samples = sampleStroke(stroke, 8);
@@ -266,7 +291,7 @@ export const useTransformTool = (
         setDragStart(null);
         return false;
 
-    }, [strokes, selection, getSelectionBounds]);
+    }, [strokes, selectableStrokes, selection, getSelectionBounds, bindLinkedFillsOnTransform]);
 
     const handleMove = useCallback((pos: Point, isAlt: boolean) => {
         if (!dragStart || selection.length === 0 || initialStrokesMap.size === 0) return;
@@ -450,7 +475,7 @@ export const useTransformTool = (
         const yMin = Math.min(box.start.y, box.end.y);
         const yMax = Math.max(box.start.y, box.end.y);
 
-        strokes.forEach(s => {
+        selectableStrokes.forEach(s => {
             const indices = new Set<number>();
             s.points.forEach((p, idx) => {
                 if (p.x >= xMin && p.x <= xMax && p.y >= yMin && p.y <= yMax) {
@@ -470,7 +495,7 @@ export const useTransformTool = (
 
         setSelection(newSelection);
         updateCentroid(newSelection, strokes);
-    }, [strokes, selection]);
+    }, [strokes, selectableStrokes, selection]);
 
     const handleDoubleClick = useCallback((pos: Point) => {
         // Double click logic:
@@ -480,8 +505,8 @@ export const useTransformTool = (
         
         // Simple hit test for point
         const POINT_RADIUS = 12;
-        for (let i = strokes.length - 1; i >= 0; i--) {
-            const stroke = strokes[i];
+        for (let i = selectableStrokes.length - 1; i >= 0; i--) {
+            const stroke = selectableStrokes[i];
             if (!strokeBoundsHit(stroke, pos, POINT_RADIUS + 5)) continue; 
             for (let idx = 0; idx < stroke.points.length; idx++) {
                 const p = stroke.points[idx];
@@ -497,7 +522,7 @@ export const useTransformTool = (
         // If not hit point, but inside bounds? Deselect.
         setSelection([]);
         setCentroid(null);
-    }, [strokes, getSelectionBounds]);
+    }, [strokes, selectableStrokes, getSelectionBounds]);
 
     return {
         selection,
