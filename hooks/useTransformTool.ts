@@ -133,9 +133,6 @@ export const useTransformTool = (
 
     const selectableStrokes = transformEditAllLayers ? strokes : strokes.filter(s => s.layerId === activeLayerId);
 
-    const selectableStrokes = transformEditAllLayers
-        ? strokes
-        : strokes.filter(s => s.layerId === activeLayerId);
 
 
 
