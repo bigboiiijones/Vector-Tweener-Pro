@@ -727,6 +727,41 @@ export const useKeyframeSystem = (totalFrames: number) => {
         });
     }, []);
 
+    const replaceCompositeFrameStrokes = useCallback((currentFrameIndex: number, strokes: Stroke[]) => {
+        const grouped = new Map<string, Stroke[]>();
+        strokes.forEach(stroke => {
+            const list = grouped.get(stroke.layerId) || [];
+            list.push({ ...stroke, isSelected: false });
+            grouped.set(stroke.layerId, list);
+        });
+
+        setKeyframes(prev => {
+            const next = [...prev];
+            grouped.forEach((layerStrokes, layerId) => {
+                const idx = next.findIndex(k => k.index === currentFrameIndex && k.layerId === layerId);
+                if (idx !== -1) {
+                    const frame = next[idx];
+                    next[idx] = {
+                        ...frame,
+                        strokes: layerStrokes,
+                        type: frame.type === 'HOLD' ? 'KEY' : frame.type
+                    };
+                } else {
+                    next.push({
+                        id: uuidv4(),
+                        layerId,
+                        index: currentFrameIndex,
+                        strokes: layerStrokes,
+                        motionPaths: [],
+                        easing: 'LINEAR',
+                        type: 'KEY'
+                    });
+                }
+            });
+            return next;
+        });
+    }, []);
+
     const updateEasing = useCallback((id: string, easing: EasingType) => {
         setKeyframes(prev => prev.map(k => k.id === id ? { ...k, easing } : k));
     }, []);
@@ -784,6 +819,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
         deleteStrokeById,
         createFillStroke,
         replaceStrokesForFrame,
+        replaceCompositeFrameStrokes,
         updateEasing,
         createBinding,
         setFramePairBindings,

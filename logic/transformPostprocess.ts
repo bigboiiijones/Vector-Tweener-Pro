@@ -10,6 +10,7 @@ export interface TransformPostProcessOptions {
   closeThreshold: number;
 }
 
+
 const adaptClosedSeamToBezier = (points: Point[]) => {
   if (points.length < 4) return;
   const first = points[0];

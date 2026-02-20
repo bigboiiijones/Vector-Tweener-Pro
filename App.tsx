@@ -110,8 +110,8 @@ const App: React.FC = () => {
   const activeCameraTransform = tempCameraTransform || computedCameraTransform;
 
   const updateStrokes = useCallback((newStrokes: any[]) => {
-      keyframeSystem.replaceStrokesForFrame(currentFrameIndex, layerSystem.activeLayerId, newStrokes);
-  }, [currentFrameIndex, keyframeSystem, layerSystem.activeLayerId]);
+      keyframeSystem.replaceCompositeFrameStrokes(currentFrameIndex, newStrokes);
+  }, [currentFrameIndex, keyframeSystem]);
 
   const updateSelectedStrokes = useCallback((updates: Partial<Stroke>) => {
       if (!activeKeyframe) return;
