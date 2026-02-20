@@ -74,7 +74,6 @@ export const postProcessTransformedStrokes = (
   strokes: Stroke[],
   options: TransformPostProcessOptions
   options: { autoClose: boolean; autoMerge: boolean; bezierAdaptive: boolean; closeCreatesFill: boolean; fillColor: string; closeThreshold: number }
-  options: { autoClose: boolean; autoMerge: boolean; bezierAdaptive: boolean; closeThreshold: number }
 ): Stroke[] => {
   let next = [...strokes];
 
