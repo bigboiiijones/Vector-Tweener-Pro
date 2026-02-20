@@ -80,6 +80,7 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
     const toggleDrawStroke = () => setOptions({ ...options, drawStroke: !options.drawStroke });
     const toggleDrawFill = () => setOptions({ ...options, drawFill: !options.drawFill });
     const toggleBezierAdaptive = () => setOptions({ ...options, bezierAdaptive: !options.bezierAdaptive });
+    const toggleCloseCreatesFill = () => setOptions({ ...options, closeCreatesFill: !options.closeCreatesFill });
 
     // Canvas Settings Handlers
     const setCanvasColor = (color: string) => setProjectSettings({ ...projectSettings, canvasColor: color });
@@ -179,7 +180,6 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                                 type="checkbox"
                                 checked={!firstSelectedStroke?.fillColor || firstSelectedStroke.fillColor === 'transparent'}
                                 onChange={(e) => updateSelectedStrokes(e.target.checked ? { fillColor: undefined } : { fillColor: options.defaultFillColor })}
-                                onChange={(e) => updateSelectedStrokes(e.target.checked ? { fillColor: undefined } : { fillColor: options.defaultFillColor, isClosed: true })}
                                 className="w-3 h-3 rounded bg-gray-700 border-gray-600"
                             />
                         </label>
@@ -244,6 +244,19 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                         >
                             <Merge size={14} />
                             <span>Auto-Merge</span>
+                        </button>
+
+                        <button 
+                            onClick={toggleCloseCreatesFill}
+                            className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
+                                options.closeCreatesFill 
+                                ? 'bg-emerald-900/30 border-emerald-500 text-emerald-200' 
+                                : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
+                            }`}
+                            title="When transform-closing, create or preserve fill"
+                        >
+                            <PaintBucket size={14} />
+                            <span>Create Fill on Close</span>
                         </button>
                         <button 
                             onClick={toggleBezierAdaptive}

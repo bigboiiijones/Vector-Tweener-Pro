@@ -178,13 +178,21 @@ export const useCanvasInteraction = ({
 
         // Paint Bucket Tool
         if (currentTool === ToolType.PAINT_BUCKET) {
-            const paintPool = toolOptions.crossLayerPainting ? displayedStrokes : displayedStrokes.filter(s => s.layerId === activeLayerId);
+            const basePool = toolOptions.crossLayerPainting ? displayedStrokes : displayedStrokes.filter(s => s.layerId === activeLayerId);
+            const paintPool = toolOptions.paintBucketMode === 'FILL'
+                ? basePool.filter(s => !(((s.width || 0) <= 0) && (!s.color || s.color === 'transparent')))
+                : basePool;
             const paintHit = findPaintTarget(pos, paintPool, toolOptions.gapClosingDistance, viewport.zoom);
 
             if (paintHit) {
                 if (toolOptions.paintBucketMode === 'ERASE') {
                     if (paintHit.kind === 'STROKE' && paintHit.stroke) {
-                        onDeleteStroke?.(paintHit.stroke.id);
+                        const isFillOnly = (paintHit.stroke.width || 0) <= 0 && (!paintHit.stroke.color || paintHit.stroke.color === 'transparent');
+                        if (isFillOnly) {
+                            onDeleteStroke?.(paintHit.stroke.id);
+                        } else if (onStrokeUpdate) {
+                            onStrokeUpdate(paintHit.stroke.id, { fillColor: undefined });
+                        }
                     }
                 } else if (paintHit.kind === 'STROKE' && paintHit.stroke && onStrokeUpdate) {
                     onStrokeUpdate(paintHit.stroke.id, {
@@ -385,6 +393,8 @@ export const useCanvasInteraction = ({
                          autoClose: toolOptions.autoClose,
                          autoMerge: toolOptions.autoMerge,
                          bezierAdaptive: toolOptions.bezierAdaptive,
+                         closeCreatesFill: toolOptions.closeCreatesFill,
+                         fillColor: toolOptions.defaultFillColor,
                          closeThreshold: Math.max(2, toolOptions.gapClosingDistance / Math.max(0.2, viewport.zoom))
                      });
                      updateStrokes(postProcessed);

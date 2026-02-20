@@ -1,6 +1,35 @@
 import { Point, Stroke } from '../types';
 import { distance } from '../utils/mathUtils';
 
+
+const adaptClosedSeamToBezier = (points: Point[]) => {
+  if (points.length < 4) return;
+  const first = points[0];
+  const prev = points[points.length - 2];
+  const next = points[1];
+
+  const inDx = first.x - prev.x;
+  const inDy = first.y - prev.y;
+  const outDx = next.x - first.x;
+  const outDy = next.y - first.y;
+  const inLen = Math.hypot(inDx, inDy);
+  const outLen = Math.hypot(outDx, outDy);
+  if (inLen < 0.001 || outLen < 0.001) return;
+
+  const inNx = inDx / inLen;
+  const inNy = inDy / inLen;
+  const outNx = outDx / outLen;
+  const outNy = outDy / outLen;
+  const handleIn = Math.min(inLen, outLen) * 0.35;
+  const handleOut = Math.min(inLen, outLen) * 0.35;
+
+  points[0] = {
+    ...first,
+    cp1: { x: first.x - inNx * handleIn, y: first.y - inNy * handleIn },
+    cp2: { x: first.x + outNx * handleOut, y: first.y + outNy * handleOut }
+  };
+};
+
 const adaptJointToBezier = (points: Point[], joinIndex: number) => {
   if (joinIndex <= 0 || joinIndex >= points.length - 1) return;
   const prev = points[joinIndex - 1];
@@ -34,6 +63,7 @@ const adaptJointToBezier = (points: Point[], joinIndex: number) => {
 
 export const postProcessTransformedStrokes = (
   strokes: Stroke[],
+  options: { autoClose: boolean; autoMerge: boolean; bezierAdaptive: boolean; closeCreatesFill: boolean; fillColor: string; closeThreshold: number }
   options: { autoClose: boolean; autoMerge: boolean; bezierAdaptive: boolean; closeThreshold: number }
 ): Stroke[] => {
   let next = [...strokes];
@@ -46,6 +76,9 @@ export const postProcessTransformedStrokes = (
       if (distance(first, last) <= options.closeThreshold) {
         const closedPoints = [...stroke.points.slice(0, -1), first];
         if (options.bezierAdaptive) {
+          adaptClosedSeamToBezier(closedPoints);
+          adaptJointToBezier(closedPoints, Math.max(1, closedPoints.length - 2));
+          adaptJointToBezier(closedPoints, 1);
           adaptJointToBezier(closedPoints, 0);
           adaptJointToBezier(closedPoints, closedPoints.length - 2);
         }
@@ -53,6 +86,7 @@ export const postProcessTransformedStrokes = (
         return {
           ...stroke,
           isClosed: true,
+          fillColor: options.closeCreatesFill ? (stroke.fillColor || options.fillColor) : stroke.fillColor,
           fillColor: stroke.fillColor || '#000000',
           points: closedPoints
         };

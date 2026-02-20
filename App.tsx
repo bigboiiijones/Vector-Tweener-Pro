@@ -110,14 +110,8 @@ const App: React.FC = () => {
   const activeCameraTransform = tempCameraTransform || computedCameraTransform;
 
   const updateStrokes = useCallback((newStrokes: any[]) => {
-      if (activeKeyframe) {
-          activeKeyframe.strokes = newStrokes; 
-          // Re-trigger update in system via a dummy addKeyframe or direct manipulation?
-          // Since activeKeyframe is a reference to state object in hook, we need to trigger setKeyframes.
-          // Ideally use a specific update method, but addKeyframe logic handles "Update existing".
-          keyframeSystem.addKeyframe(currentFrameIndex, layerSystem.activeLayerId, layerSystem.layers); 
-      }
-  }, [activeKeyframe, currentFrameIndex, keyframeSystem, layerSystem.activeLayerId, layerSystem.layers]);
+      keyframeSystem.replaceStrokesForFrame(currentFrameIndex, layerSystem.activeLayerId, newStrokes);
+  }, [currentFrameIndex, keyframeSystem, layerSystem.activeLayerId]);
 
   const updateSelectedStrokes = useCallback((updates: Partial<Stroke>) => {
       if (!activeKeyframe) return;

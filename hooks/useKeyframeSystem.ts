@@ -700,6 +700,33 @@ export const useKeyframeSystem = (totalFrames: number) => {
         });
     }, []);
 
+
+    const replaceStrokesForFrame = useCallback((currentFrameIndex: number, activeLayerId: string, strokes: Stroke[]) => {
+        setKeyframes(prev => {
+            const idx = prev.findIndex(k => k.index === currentFrameIndex && k.layerId === activeLayerId);
+            const next = [...prev];
+            if (idx !== -1) {
+                const frame = next[idx];
+                next[idx] = {
+                    ...frame,
+                    strokes: strokes.map(st => ({ ...st, isSelected: false })),
+                    type: frame.type === 'HOLD' ? 'KEY' : frame.type
+                };
+            } else {
+                next.push({
+                    id: uuidv4(),
+                    layerId: activeLayerId,
+                    index: currentFrameIndex,
+                    strokes: strokes.map(st => ({ ...st, isSelected: false })),
+                    motionPaths: [],
+                    easing: 'LINEAR',
+                    type: 'KEY'
+                });
+            }
+            return next;
+        });
+    }, []);
+
     const updateEasing = useCallback((id: string, easing: EasingType) => {
         setKeyframes(prev => prev.map(k => k.id === id ? { ...k, easing } : k));
     }, []);
@@ -756,6 +783,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
         updateStrokeById,
         deleteStrokeById,
         createFillStroke,
+        replaceStrokesForFrame,
         updateEasing,
         createBinding,
         setFramePairBindings,
