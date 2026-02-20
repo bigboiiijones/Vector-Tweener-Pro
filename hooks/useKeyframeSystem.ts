@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Keyframe, GroupBinding, Stroke, Point, ToolType, EasingType, AutoMatchStrategy, ToolOptions, CameraKeyframe, CameraTransform, Layer } from '../types';
 import { calculateTweens } from '../logic/tweening';
 import { simplifyPath, smoothPolyline, distance } from '../utils/mathUtils';
+import { adaptBezierForMergedPath } from '../logic/bezierAdaptation';
 
 const DUMMY_KEYFRAME: Keyframe = { 
     id: 'dummy', 
@@ -485,7 +486,9 @@ export const useKeyframeSystem = (totalFrames: number) => {
             taperStart: options.defaultTaperStart,
             taperEnd: options.defaultTaperEnd,
             isClosed: isClosed || [ToolType.RECTANGLE, ToolType.CIRCLE, ToolType.TRIANGLE, ToolType.STAR].includes(tool),
-            fillColor: options.drawFill ? options.defaultFillColor : undefined
+            fillColor: (options.drawFill || ((isClosed || [ToolType.RECTANGLE, ToolType.CIRCLE, ToolType.TRIANGLE, ToolType.STAR].includes(tool)) && options.closeCreatesFill))
+                ? options.defaultFillColor
+                : undefined
         };
         
         let mergedStrokeId: string | undefined = undefined;
@@ -526,11 +529,20 @@ export const useKeyframeSystem = (totalFrames: number) => {
 
                     if (targetStroke && mergeType) {
                         let mergedPoints: Point[] = [];
+                        const mergeIndex = mergeType === 'APPEND_TO_END'
+                            ? targetStroke.points.length - 1
+                            : processedPoints.length - 1;
+
                         if (mergeType === 'APPEND_TO_END') {
                             mergedPoints = [...targetStroke.points, ...processedPoints.slice(1)];
                         } else {
                             mergedPoints = [...processedPoints, ...targetStroke.points.slice(1)];
                         }
+
+                        if (options.bezierAdaptiveJoin) {
+                            mergedPoints = adaptBezierForMergedPath(mergedPoints, mergeIndex, !!targetStroke.isClosed, 0.22);
+                        }
+
                         const mergedStroke = { ...targetStroke, points: mergedPoints, isSelected: true };
                         mergedStrokeId = mergedStroke.id;
                         updatedStrokes = updatedStrokes.map(s => s.id === targetStroke!.id ? mergedStroke : s);
@@ -591,6 +603,34 @@ export const useKeyframeSystem = (totalFrames: number) => {
         setKeyframes(prev => prev.map(k => k.id === id ? { ...k, easing } : k));
     }, []);
 
+
+    const updateStrokeById = useCallback((currentFrameIndex: number, strokeId: string, updates: Partial<Stroke>) => {
+        setKeyframes(prev => prev.map(k => {
+            if (k.index !== currentFrameIndex) return k;
+
+            let changed = false;
+            const nextStrokes = k.strokes.map(s => {
+                if (s.id === strokeId) {
+                    changed = true;
+                    return { ...s, ...updates };
+                }
+                return s;
+            });
+
+            if (!changed) return k;
+            return { ...k, strokes: nextStrokes, type: k.type === 'HOLD' ? 'KEY' : k.type };
+        }));
+    }, []);
+
+    const deleteStrokeById = useCallback((currentFrameIndex: number, strokeId: string) => {
+        setKeyframes(prev => prev.map(k => {
+            if (k.index !== currentFrameIndex) return k;
+            const nextStrokes = k.strokes.filter(s => s.id !== strokeId);
+            if (nextStrokes.length === k.strokes.length) return k;
+            return { ...k, strokes: nextStrokes, type: k.type === 'HOLD' ? 'KEY' : k.type };
+        }));
+    }, []);
+
     // Delete Frames logic - now accepts list of Keyframe IDs to delete
     const deleteFrames = useCallback((keyframeIds: Set<string>) => {
         setKeyframes(prev => prev.filter(k => !keyframeIds.has(k.id)));
@@ -621,6 +661,8 @@ export const useKeyframeSystem = (totalFrames: number) => {
         commitStroke,
         deleteSelected,
         reverseSelected,
+        updateStrokeById,
+        deleteStrokeById,
         updateEasing,
         createBinding,
         setFramePairBindings,

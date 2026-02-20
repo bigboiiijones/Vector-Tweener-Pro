@@ -17,7 +17,8 @@ import {
     Network,
     Play,
     Move3d,
-    Video
+    Video,
+    PaintBucket
 } from 'lucide-react';
 
 interface ToolbarProps {
@@ -53,6 +54,7 @@ export const Toolbar: React.FC<ToolbarProps> = React.memo(({
     { id: ToolType.BIND, icon: <Link2 size={18} />, label: 'Bind (B)' },
     { id: ToolType.CORRESPONDENCE, icon: <Network size={18} />, label: 'Correspondence (K)' },
     { id: ToolType.MOTION_PATH, icon: <Route size={18} />, label: 'Motion Path (M)' },
+    { id: ToolType.PAINT_BUCKET, icon: <PaintBucket size={18} />, label: 'Paint Bucket (G)' },
   ];
 
   return (

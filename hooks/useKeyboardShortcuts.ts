@@ -55,6 +55,7 @@ export const useKeyboardShortcuts = ({
                 if (e.key === 'c') setTool(ToolType.CURVE);
                 if (e.key === 'm') setTool(ToolType.MOTION_PATH);
                 if (e.key === 'k') setTool(ToolType.CORRESPONDENCE);
+                if (e.key === 'g') setTool(ToolType.PAINT_BUCKET);
                 if (e.key === 'Delete') deleteSelected();
                 if (e.key === 'r') reverseSelected();
             } else if (activePanel === 'TIMELINE') {

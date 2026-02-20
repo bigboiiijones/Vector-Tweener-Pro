@@ -27,6 +27,8 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
     
     const isDrawTool = [ToolType.PEN, ToolType.POLYLINE, ToolType.CURVE, ToolType.RECTANGLE, ToolType.CIRCLE, ToolType.TRIANGLE, ToolType.STAR].includes(currentTool);
     const isTransformTool = currentTool === ToolType.TRANSFORM;
+    const isSelectTool = currentTool === ToolType.SELECT;
+    const isPaintTool = currentTool === ToolType.PAINT_BUCKET;
     const hasSelection = selectedStrokeIds.size > 0;
 
     // Local state for selection properties to avoid jitter
@@ -151,6 +153,39 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                                 className="w-full h-1 bg-blue-600 rounded-lg appearance-none cursor-pointer"
                             />
                         </div>
+
+                        <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-blue-300">Fill Color</span>
+                            <input
+                                type="color"
+                                value={firstSelectedStroke?.fillColor || options.defaultFillColor}
+                                onChange={(e) => updateSelectedStrokes({ fillColor: e.target.value, isClosed: true })}
+                                className="w-6 h-6 rounded cursor-pointer bg-transparent border-none"
+                            />
+                        </div>
+
+                        {isSelectTool && (
+                            <>
+                                <label className="flex items-center justify-between text-[10px] text-blue-300">
+                                    <span>Enable Stroke</span>
+                                    <input
+                                        type="checkbox"
+                                        checked={firstSelectedStroke ? (firstSelectedStroke.color || 'transparent') !== 'transparent' && (firstSelectedStroke.width || 0) > 0 : true}
+                                        onChange={(e) => updateSelectedStrokes(e.target.checked ? { color: selColor || options.defaultColor, width: Math.max(1, selWidth || options.defaultWidth) } : { color: 'transparent', width: 0 })}
+                                        className="w-3 h-3 rounded bg-gray-700 border-gray-600"
+                                    />
+                                </label>
+                                <label className="flex items-center justify-between text-[10px] text-blue-300">
+                                    <span>Enable Fill</span>
+                                    <input
+                                        type="checkbox"
+                                        checked={!!firstSelectedStroke?.fillColor}
+                                        onChange={(e) => updateSelectedStrokes(e.target.checked ? { fillColor: options.defaultFillColor, isClosed: true } : { fillColor: undefined })}
+                                        className="w-3 h-3 rounded bg-gray-700 border-gray-600"
+                                    />
+                                </label>
+                            </>
+                        )}
                     </div>
                 )}
 
@@ -188,6 +223,43 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                         <Spline size={14} />
                         <span>Show Handles</span>
                     </button>
+                )}
+                {isTransformTool && (
+                    <>
+                        <button 
+                            onClick={toggleAutoClose}
+                            className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
+                                options.autoClose 
+                                ? 'bg-green-900/30 border-green-500 text-green-200' 
+                                : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
+                            }`}
+                        >
+                            <Magnet size={14} />
+                            <span>Cling / Close</span>
+                        </button>
+                        <button 
+                            onClick={toggleAutoMerge}
+                            className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
+                                options.autoMerge 
+                                ? 'bg-blue-900/30 border-blue-500 text-blue-200' 
+                                : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
+                            }`}
+                        >
+                            <Merge size={14} />
+                            <span>Auto-Merge</span>
+                        </button>
+                        <button
+                            onClick={() => setOptions({ ...options, bezierAdaptiveJoin: !options.bezierAdaptiveJoin })}
+                            className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
+                                options.bezierAdaptiveJoin
+                                ? 'bg-cyan-900/30 border-cyan-500 text-cyan-200'
+                                : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
+                            }`}
+                        >
+                            <Spline size={14} />
+                            <span>Bezier Adaptive Join</span>
+                        </button>
+                    </>
                 )}
 
                 {/* DRAWING PROPERTIES (Global) */}
@@ -343,6 +415,19 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                             <span>Smart Beziers</span>
                         </button>
 
+                        <button
+                            onClick={() => setOptions({ ...options, bezierAdaptiveJoin: !options.bezierAdaptiveJoin })}
+                            className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
+                                options.bezierAdaptiveJoin
+                                ? 'bg-cyan-900/30 border-cyan-500 text-cyan-200'
+                                : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
+                            }`}
+                            title="Preserve smooth bezier continuity when auto-merge/close/snap are active"
+                        >
+                            <Spline size={14} />
+                            <span>Bezier Adaptive Join</span>
+                        </button>
+
                         <div className="px-1 py-2">
                             <div className="flex justify-between text-[10px] text-gray-400 mb-1">
                                 <span>Reduction/Smooth</span>
@@ -360,6 +445,58 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                 )}
 
                 <div className="h-px bg-gray-700 my-1"/>
+
+                {isPaintTool && (
+                    <div className="space-y-2 p-2 bg-amber-900/20 border border-amber-700/40 rounded">
+                        <div className="text-[10px] uppercase tracking-wider text-amber-300 font-bold">Paint Bucket</div>
+                        <div className="flex gap-1 bg-gray-900/50 p-1 rounded">
+                            <button
+                                onClick={() => setOptions({ ...options, paintBucketMode: 'FILL' })}
+                                className={`flex-1 py-1 rounded text-[10px] font-bold transition-colors ${options.paintBucketMode === 'FILL' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                            >
+                                FILL
+                            </button>
+                            <button
+                                onClick={() => setOptions({ ...options, paintBucketMode: 'ERASE' })}
+                                className={`flex-1 py-1 rounded text-[10px] font-bold transition-colors ${options.paintBucketMode === 'ERASE' ? 'bg-red-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                            >
+                                ERASE
+                            </button>
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-gray-400">Fill Color</span>
+                            <input
+                                type="color"
+                                value={options.defaultFillColor}
+                                onChange={(e) => setFillColor(e.target.value)}
+                                className="w-5 h-5 rounded cursor-pointer bg-transparent border-none"
+                                title="Paint bucket fill color"
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <div className="flex justify-between text-[10px] text-gray-400">
+                                <span>Gap Closing</span>
+                                <span>{options.gapClosingDistance}px</span>
+                            </div>
+                            <input
+                                type="range" min="1" max="80" step="1"
+                                value={options.gapClosingDistance}
+                                onChange={(e) => setGapClosing(parseInt(e.target.value))}
+                                className="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+                            />
+                        </div>
+                        <button onClick={() => setOptions({ ...options, crossLayerPainting: !options.crossLayerPainting })}
+                            className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${options.crossLayerPainting ? 'bg-indigo-900/30 border-indigo-500 text-indigo-200' : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'}`}>
+                            <Layers size={14} />
+                            <span>Cross-Layer Paint</span>
+                        </button>
+                        <button onClick={() => setOptions({ ...options, crossGroupPainting: !options.crossGroupPainting })}
+                            className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${options.crossGroupPainting ? 'bg-indigo-900/30 border-indigo-500 text-indigo-200' : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'}`}>
+                            <Layers size={14} />
+                            <span>Cross-Group Paint</span>
+                        </button>
+                    </div>
+                )}
 
                 {/* Match Strategy */}
                 <button 
