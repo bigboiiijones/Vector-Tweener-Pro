@@ -74,7 +74,9 @@ const App: React.FC = () => {
       drawFill: false,
       gapClosingDistance: 20,
       paintBucketMode: 'FILL',
-      bezierAdaptive: true
+      bezierAdaptive: true,
+      transformEditAllLayers: false,
+      bindLinkedFillsOnTransform: true
   });
   
   const svgRef = useRef<SVGSVGElement>(null);

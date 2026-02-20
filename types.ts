@@ -13,6 +13,7 @@ export interface Stroke {
   isSelected?: boolean;
   center?: Point; 
   linkedStrokeIds?: string[]; 
+  bindToLinkedStrokes?: boolean;
   parents?: string[]; 
   isClosed?: boolean; 
   fillColor?: string;
@@ -128,6 +129,8 @@ export interface ToolOptions {
     gapClosingDistance: number;
     paintBucketMode: 'FILL' | 'ERASE';
     bezierAdaptive: boolean;
+    transformEditAllLayers: boolean;
+    bindLinkedFillsOnTransform: boolean;
 }
 
 // --- Layer System Types ---

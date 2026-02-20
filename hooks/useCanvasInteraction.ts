@@ -97,7 +97,9 @@ export const useCanvasInteraction = ({
         toolOptions.transformMode,
         toolOptions.snappingEnabled,
         activeLayerId,
-        toolOptions.crossLayerSnapping
+        toolOptions.crossLayerSnapping,
+        toolOptions.transformEditAllLayers,
+        toolOptions.bindLinkedFillsOnTransform
     );
 
     const forceFinishPolyline = () => {

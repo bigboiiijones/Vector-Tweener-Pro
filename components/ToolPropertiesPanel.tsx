@@ -81,6 +81,8 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
     const toggleDrawFill = () => setOptions({ ...options, drawFill: !options.drawFill });
     const toggleBezierAdaptive = () => setOptions({ ...options, bezierAdaptive: !options.bezierAdaptive });
     const toggleCloseCreatesFill = () => setOptions({ ...options, closeCreatesFill: !options.closeCreatesFill });
+    const toggleTransformEditAllLayers = () => setOptions({ ...options, transformEditAllLayers: !options.transformEditAllLayers });
+    const toggleBindLinkedFillsOnTransform = () => setOptions({ ...options, bindLinkedFillsOnTransform: !options.bindLinkedFillsOnTransform });
 
     // Canvas Settings Handlers
     const setCanvasColor = (color: string) => setProjectSettings({ ...projectSettings, canvasColor: color });
@@ -175,6 +177,15 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                             />
                         </label>
                         <label className="flex items-center justify-between text-[10px] text-blue-300">
+                            <span>Bind Fill to Linked Lines</span>
+                            <input
+                                type="checkbox"
+                                checked={!!firstSelectedStroke?.bindToLinkedStrokes}
+                                onChange={(e) => updateSelectedStrokes({ bindToLinkedStrokes: e.target.checked })}
+                                className="w-3 h-3 rounded bg-gray-700 border-gray-600"
+                            />
+                        </label>
+                        <label className="flex items-center justify-between text-[10px] text-blue-300">
                             <span>Remove Fill</span>
                             <input
                                 type="checkbox"
@@ -207,6 +218,35 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                      </div>
                 )}
 
+
+                {isTransformTool && (
+                    <button
+                        onClick={toggleTransformEditAllLayers}
+                        className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
+                            options.transformEditAllLayers
+                            ? 'bg-indigo-900/30 border-indigo-500 text-indigo-200'
+                            : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
+                        }`}
+                        title="Edit across all visible layers or only active layer"
+                    >
+                        <Layers size={14} />
+                        <span>{options.transformEditAllLayers ? 'Edit: All Layers' : 'Edit: Active Layer'}</span>
+                    </button>
+                )}
+                {isTransformTool && (
+                    <button
+                        onClick={toggleBindLinkedFillsOnTransform}
+                        className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
+                            options.bindLinkedFillsOnTransform
+                            ? 'bg-emerald-900/30 border-emerald-500 text-emerald-200'
+                            : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
+                        }`}
+                        title="Move linked fills when transforming source line art"
+                    >
+                        <PaintBucket size={14} />
+                        <span>Bind Linked Fills</span>
+                    </button>
+                )}
                 {/* BEZIER TOGGLE */}
                 {isTransformTool && (
                      <button 

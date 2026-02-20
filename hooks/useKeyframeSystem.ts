@@ -672,7 +672,8 @@ export const useKeyframeSystem = (totalFrames: number) => {
             color: 'transparent',
             width: 0,
             fillColor,
-            linkedStrokeIds: sourceStrokeIds
+            linkedStrokeIds: sourceStrokeIds,
+            bindToLinkedStrokes: true
         };
 
         setKeyframes(prev => {

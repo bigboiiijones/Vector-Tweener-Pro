@@ -10,6 +10,7 @@ export interface TransformPostProcessOptions {
   closeThreshold: number;
 }
 
+
 const adaptClosedSeamToBezier = (points: Point[]) => {
   if (points.length < 4) return;
   const first = points[0];
@@ -69,6 +70,29 @@ const adaptJointToBezier = (points: Point[], joinIndex: number) => {
   };
 };
 
+const applyAutoClose = (strokes: Stroke[], options: TransformPostProcessOptions): Stroke[] => {
+  return strokes.map((stroke) => {
+    if (stroke.points.length < 3 || stroke.isClosed) return stroke;
+    const first = stroke.points[0];
+    const last = stroke.points[stroke.points.length - 1];
+    if (distance(first, last) > options.closeThreshold) return stroke;
+
+    const closedPoints = [...stroke.points.slice(0, -1), first];
+    if (options.bezierAdaptive) {
+      adaptClosedSeamToBezier(closedPoints);
+      adaptJointToBezier(closedPoints, Math.max(1, closedPoints.length - 2));
+      adaptJointToBezier(closedPoints, 1);
+    }
+
+    return {
+      ...stroke,
+      isClosed: true,
+      fillColor: options.closeCreatesFill ? (stroke.fillColor || options.fillColor) : stroke.fillColor,
+      points: closedPoints
+    };
+  });
+};
+
 export const postProcessTransformedStrokes = (
   strokes: Stroke[],
   options: TransformPostProcessOptions
@@ -76,32 +100,7 @@ export const postProcessTransformedStrokes = (
   let next = [...strokes];
 
   if (options.autoClose) {
-    next = next.map((stroke) => {
-      if (stroke.points.length < 3 || stroke.isClosed) return stroke;
-      const first = stroke.points[0];
-      const last = stroke.points[stroke.points.length - 1];
-
-      if (distance(first, last) <= options.closeThreshold) {
-        const closedPoints = [...stroke.points.slice(0, -1), first];
-
-        if (options.bezierAdaptive) {
-          adaptClosedSeamToBezier(closedPoints);
-          adaptJointToBezier(closedPoints, Math.max(1, closedPoints.length - 2));
-          adaptJointToBezier(closedPoints, 1);
-        }
-
-        return {
-          ...stroke,
-          isClosed: true,
-          fillColor: options.closeCreatesFill
-            ? (stroke.fillColor || options.fillColor)
-            : stroke.fillColor,
-          points: closedPoints
-        };
-      }
-
-      return stroke;
-    });
+    next = applyAutoClose(next, options);
   }
 
   if (options.autoMerge) {
@@ -126,7 +125,6 @@ export const postProcessTransformedStrokes = (
           const mergedPoints = [...mergedStroke.points, ...b.points.slice(1)];
           const incomingJoin = mergedStroke.points[mergedStroke.points.length - 1];
           const outgoingJoin = b.points[0];
-
           mergedPoints[joinIndex] = {
             ...mergedPoints[joinIndex],
             cp1: mergedPoints[joinIndex].cp1 || incomingJoin.cp1,
@@ -149,6 +147,10 @@ export const postProcessTransformedStrokes = (
     }
 
     next = merged;
+  }
+
+  if (options.autoClose) {
+    next = applyAutoClose(next, options);
   }
 
   return next;
