@@ -54,7 +54,6 @@ export const useKeyframeSystem = (totalFrames: number) => {
             });
             return changed ? newKeys : prev;
         });
-        return fillStroke.id;
     }, []);
 
     // Helper to get Tween Context for a SPECIFIC Layer
