@@ -54,6 +54,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
             });
             return changed ? newKeys : prev;
         });
+        return fillStroke.id;
     }, []);
 
     // Helper to get Tween Context for a SPECIFIC Layer
@@ -148,6 +149,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
             }
             return [...prev, { id: uuidv4(), index: frameIndex, transform, easing: 'LINEAR' }];
         });
+        return fillStroke.id;
     }, []);
 
     const deleteCameraKeyframes = useCallback((indices: number[]) => {
@@ -178,6 +180,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
             newKeyframes = newKeyframes.filter(k => !newIndices.has(k.index));
             return [...newKeyframes, ...movedFrames].sort((a, b) => a.index - b.index);
         });
+        return fillStroke.id;
     }, []);
 
 
@@ -375,6 +378,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
              const newMoved = moving.map(k => ({ ...k, index: movedMap.get(k.id)! }));
              return [...finalKeys, ...newMoved];
          });
+        return fillStroke.id;
     }, []);
 
     const deleteSelected = useCallback((currentFrameIndex: number, selectedIds: Set<string>, activeLayerId: string) => {
@@ -406,6 +410,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
             }
             return nextKeys;
         });
+        return fillStroke.id;
     }, []);
 
     // Reverse selected strokes (vector op)
@@ -444,6 +449,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
             }
             return nextKeys;
         });
+        return fillStroke.id;
     }, []);
 
 
@@ -522,7 +528,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
             taperStart: options.defaultTaperStart,
             taperEnd: options.defaultTaperEnd,
             isClosed: isClosed || [ToolType.RECTANGLE, ToolType.CIRCLE, ToolType.TRIANGLE, ToolType.STAR].includes(tool),
-            fillColor: (options.drawFill || ((isClosed || [ToolType.RECTANGLE, ToolType.CIRCLE, ToolType.TRIANGLE, ToolType.STAR].includes(tool)) && options.closeCreatesFill))
+            fillColor: (options.drawFill || (isClosed && options.closeCreatesFill))
                 ? options.defaultFillColor
                 : undefined
         };
@@ -662,7 +668,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
         fillColor: string,
         sourceStrokeIds: string[] = []
     ) => {
-        if (points.length < 3) return;
+        if (points.length < 3) return undefined;
         const fillStroke: Stroke = {
             id: uuidv4(),
             layerId: activeLayerId,
@@ -699,6 +705,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
             }
             return nextKeys;
         });
+        return fillStroke.id;
     }, []);
 
 
@@ -726,6 +733,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
             }
             return next;
         });
+        return fillStroke.id;
     }, []);
 
     const replaceCompositeFrameStrokes = useCallback((currentFrameIndex: number, strokes: Stroke[]) => {
@@ -761,6 +769,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
             });
             return next;
         });
+        return fillStroke.id;
     }, []);
 
     const updateEasing = useCallback((id: string, easing: EasingType) => {

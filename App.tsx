@@ -92,7 +92,11 @@ const App: React.FC = () => {
   // Deselect when changing tools
   useEffect(() => {
       selection.setSelectedStrokeIds(new Set());
-      setToolOptions(prev => ({ ...prev, transformMode: TransformMode.TRANSLATE })); // Reset transform mode too? Maybe not.
+      setToolOptions(prev => ({
+          ...prev,
+          transformMode: TransformMode.TRANSLATE,
+          snappingEnabled: currentTool === ToolType.CURVE ? true : prev.snappingEnabled
+      }));
   }, [currentTool]);
 
   // Initialize keyframes for layers
@@ -122,7 +126,8 @@ const App: React.FC = () => {
           const selected = activeKeyframe.strokes.filter(s => selection.selectedStrokeIds.has(s.id));
           const loop = findClosedLoopFromStrokes(selected, Math.max(2, toolOptions.gapClosingDistance / Math.max(0.2, viewport.zoom)));
           if (loop) {
-              keyframeSystem.createFillStroke(currentFrameIndex, layerSystem.activeLayerId, loop.points, updates.fillColor, loop.strokeIds);
+              const fillId = keyframeSystem.createFillStroke(currentFrameIndex, layerSystem.activeLayerId, loop.points, updates.fillColor, loop.strokeIds);
+              if (fillId) selection.setSelectedStrokeIds(new Set([fillId]));
               return;
           }
       }
@@ -223,7 +228,10 @@ const App: React.FC = () => {
       setViewport,
       onStrokeUpdate: (id, updates) => keyframeSystem.updateStrokeById(currentFrameIndex, id, updates),
       onDeleteStroke: (id) => keyframeSystem.deleteStrokeById(currentFrameIndex, id, layerSystem.activeLayerId),
-      onCreateFillStroke: (points, sourceIds) => keyframeSystem.createFillStroke(currentFrameIndex, layerSystem.activeLayerId, points, toolOptions.defaultFillColor, sourceIds || [])
+      onCreateFillStroke: (points, sourceIds) => {
+          const fillId = keyframeSystem.createFillStroke(currentFrameIndex, layerSystem.activeLayerId, points, toolOptions.defaultFillColor, sourceIds || []);
+          if (fillId) selection.setSelectedStrokeIds(new Set([fillId]));
+      }
   });
 
   const bindActions = useBindActions({
