@@ -331,21 +331,21 @@ export const CanvasView: React.FC<CanvasViewProps> = React.memo(({
 
                 {/* Onion Skins (Filtered by visibility too if strict, but maybe helpful reference) */}
                 {showOnion && prevOnion && prevOnion.strokes.filter(s => visibleLayerIds.has(s.layerId)).map((s, i) => (
-                    <g key={`onion-prev-${s.id}`}>
+                    <g key={`onion-prev-${s.layerId}-${s.id}-${i}`}>
                         <path d={toPathString(s.points)} fill="none" stroke="rgba(0, 255, 0, 0.15)" strokeWidth="4" />
                         <path d={toPathString(s.points)} fill="none" stroke="rgba(0, 255, 0, 0.4)" strokeWidth="1" strokeDasharray="2,2" />
                     </g>
                 ))}
-                {showOnion && nextOnion && nextOnion.strokes.filter(s => visibleLayerIds.has(s.layerId)).map(s => (
-                     <path key={`onion-next-${s.id}`} d={toPathString(s.points)} fill="none" stroke="rgba(255, 0, 0, 0.15)" strokeWidth="2" />
+                {showOnion && nextOnion && nextOnion.strokes.filter(s => visibleLayerIds.has(s.layerId)).map((s, i) => (
+                     <path key={`onion-next-${s.layerId}-${s.id}-${i}`} d={toPathString(s.points)} fill="none" stroke="rgba(255, 0, 0, 0.15)" strokeWidth="2" />
                 ))}
 
                 {/* Correspondence Overlay */}
                 {showCorresOverlay && corresPrev && corresNext && (
                     <>
-                        {corresPrev.strokes.filter(s => visibleLayerIds.has(s.layerId)).map(s => (
+                        {corresPrev.strokes.filter(s => visibleLayerIds.has(s.layerId)).map((s, i) => (
                             <path 
-                                key={`corres-green-${s.id}`} 
+                                key={`corres-green-${s.layerId}-${s.id}-${i}`} 
                                 d={toPathString(s.points)} 
                                 fill="none" 
                                 stroke={corresSelection.has(s.id) ? "#ffffff" : "#22c55e"} 
@@ -353,9 +353,9 @@ export const CanvasView: React.FC<CanvasViewProps> = React.memo(({
                                 opacity={corresSelection.has(s.id) ? 1 : 0.4}
                             />
                         ))}
-                        {corresNext.strokes.filter(s => visibleLayerIds.has(s.layerId)).map(s => (
+                        {corresNext.strokes.filter(s => visibleLayerIds.has(s.layerId)).map((s, i) => (
                              <path 
-                                key={`corres-red-${s.id}`} 
+                                key={`corres-red-${s.layerId}-${s.id}-${i}`} 
                                 d={toPathString(s.points)} 
                                 fill="none" 
                                 stroke={corresSelection.has(s.id) ? "#ffffff" : "#ef4444"} 
@@ -367,14 +367,14 @@ export const CanvasView: React.FC<CanvasViewProps> = React.memo(({
                 )}
 
                 {/* Main Strokes Rendered via Memoized Component */}
-                {displayStrokes.map((stroke) => {
+                {displayStrokes.map((stroke, index) => {
                     const isSelected = selectedStrokeIds.has(stroke.id) || (showCorresOverlay && corresSelection.has(stroke.id));
                     const transformIndices = transformIndicesMap.get(stroke.id);
                     const isTransforming = transformIndices !== undefined;
 
                     return (
                         <MemoizedStroke 
-                            key={stroke.id}
+                            key={`${stroke.layerId}-${stroke.id}-${index}`}
                             stroke={stroke}
                             isSelected={isSelected}
                             isTransforming={isTransforming}
