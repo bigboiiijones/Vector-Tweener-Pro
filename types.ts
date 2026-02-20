@@ -99,7 +99,8 @@ export interface GroupBinding {
 export enum TransformMode {
   TRANSLATE = 'TRANSLATE',
   ROTATE = 'ROTATE',
-  SCALE = 'SCALE'
+  SCALE = 'SCALE',
+  SKEW = 'SKEW'
 }
 
 export type AutoMatchStrategy = 'INDEX' | 'SPATIAL';

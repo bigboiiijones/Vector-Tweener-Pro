@@ -173,13 +173,13 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                         </div>
 
                         <label className="flex items-center justify-between text-[10px] text-blue-300">
-                            <span>Remove Stroke</span>
+                            <span>Stroke Enabled</span>
                             <input
                                 type="checkbox"
-                                checked={(firstSelectedStroke?.color === 'transparent') || (firstSelectedStroke?.width || 0) <= 0}
+                                checked={!((firstSelectedStroke?.color === 'transparent') || (firstSelectedStroke?.width || 0) <= 0)}
                                 onChange={(e) => updateSelectedStrokes(e.target.checked
-                                    ? { color: 'transparent', width: 0 }
-                                    : { color: toValidHexColor(firstSelectedStroke?.color, options.defaultColor), width: Math.max(1, firstSelectedStroke?.width || options.defaultWidth) })}
+                                    ? { color: toValidHexColor(firstSelectedStroke?.color, options.defaultColor), width: Math.max(1, firstSelectedStroke?.width || options.defaultWidth) }
+                                    : { color: 'transparent', width: 0 })}
                                 className="w-3 h-3 rounded bg-gray-700 border-gray-600"
                             />
                         </label>
@@ -193,13 +193,13 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                             />
                         </label>
                         <label className="flex items-center justify-between text-[10px] text-blue-300">
-                            <span>Remove Fill</span>
+                            <span>Fill Enabled</span>
                             <input
                                 type="checkbox"
-                                checked={!(firstSelectedStroke?.fillColor && firstSelectedStroke.fillColor !== 'transparent')}
+                                checked={!!(firstSelectedStroke?.fillColor && firstSelectedStroke.fillColor !== 'transparent')}
                                 onChange={(e) => updateSelectedStrokes(e.target.checked
-                                    ? { fillColor: undefined }
-                                    : { fillColor: toValidHexColor(firstSelectedStroke?.fillColor, options.defaultFillColor) })}
+                                    ? { fillColor: toValidHexColor(firstSelectedStroke?.fillColor, options.defaultFillColor) }
+                                    : { fillColor: undefined })}
                                 className="w-3 h-3 rounded bg-gray-700 border-gray-600"
                             />
                         </label>
@@ -208,7 +208,7 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
 
                 {/* TRANSFORM MODES */}
                 {isTransformTool && (
-                     <div className="grid grid-cols-3 gap-1 mb-2">
+                     <div className="grid grid-cols-4 gap-1 mb-2">
                          <button 
                             onClick={() => setOptions({...options, transformMode: TransformMode.TRANSLATE})}
                             className={`p-2 rounded flex justify-center ${options.transformMode === TransformMode.TRANSLATE ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
@@ -224,6 +224,11 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                             className={`p-2 rounded flex justify-center ${options.transformMode === TransformMode.SCALE ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
                             title="Scale Selection"
                          ><Scaling size={14}/></button>
+                         <button 
+                            onClick={() => setOptions({...options, transformMode: TransformMode.SKEW})}
+                            className={`p-2 rounded flex justify-center text-[10px] font-bold ${options.transformMode === TransformMode.SKEW ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                            title="Skew Selection"
+                         >SK</button>
                      </div>
                 )}
 
@@ -240,6 +245,20 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                     >
                         <Layers size={14} />
                         <span>{options.transformEditAllLayers ? 'Edit: All Layers' : 'Edit: Active Layer'}</span>
+                    </button>
+                )}
+                {isTransformTool && (
+                    <button
+                        onClick={toggleSnapping}
+                        className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
+                            options.snappingEnabled
+                            ? 'bg-yellow-900/30 border-yellow-500 text-yellow-200'
+                            : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
+                        }`}
+                        title="Snap selected points while transforming"
+                    >
+                        <Magnet size={14} />
+                        <span>Cling / Snap</span>
                     </button>
                 )}
                 {isTransformTool && (

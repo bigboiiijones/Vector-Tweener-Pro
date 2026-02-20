@@ -31,32 +31,52 @@ const reverseStrokePoints = (points: Point[]): Point[] => {
   }));
 };
 
-const mergePathPoints = (a: Point[], b: Point[]): Point[] => {
-  if (!a.length) return b;
-  if (!b.length) return a;
-  return [...a, ...b.slice(1)];
+const buildCandidateLoop = (pathA: Point[], pathB: Point[], threshold: number): Point[] | null => {
+  if (pathA.length < 2 || pathB.length < 2) return null;
+  const dJoin = distance(pathA[pathA.length - 1], pathB[0]);
+  const dClose = distance(pathB[pathB.length - 1], pathA[0]);
+  if (dJoin > threshold || dClose > threshold) return null;
+
+  const merged = [...pathA, ...pathB.slice(1)];
+  const start = pathA[0];
+  const end = merged[merged.length - 1];
+  if (distance(start, end) > 0.001) merged.push(start);
+  return merged;
 };
 
 const buildTwoStrokeLoopPoints = (a: Stroke, b: Stroke, threshold: number): Point[] | null => {
   if (a.points.length < 2 || b.points.length < 2) return null;
 
-  const aStart = a.points[0];
-  const aEnd = a.points[a.points.length - 1];
-  const bStart = b.points[0];
-  const bEnd = b.points[b.points.length - 1];
+  const candidates: Point[][] = [];
 
-  // aStart~bStart and aEnd~bEnd => reverse b
-  if (distance(aStart, bStart) <= threshold && distance(aEnd, bEnd) <= threshold) {
-    const bReversed = reverseStrokePoints(b.points);
-    return mergePathPoints(a.points, [...bReversed, a.points[0]]);
-  }
+  const forwardA = a.points;
+  const reverseA = reverseStrokePoints(a.points);
+  const forwardB = b.points;
+  const reverseB = reverseStrokePoints(b.points);
 
-  // aStart~bEnd and aEnd~bStart => natural order
-  if (distance(aStart, bEnd) <= threshold && distance(aEnd, bStart) <= threshold) {
-    return mergePathPoints(a.points, [...b.points, a.points[0]]);
-  }
+  const c1 = buildCandidateLoop(forwardA, forwardB, threshold);
+  if (c1) candidates.push(c1);
+  const c2 = buildCandidateLoop(forwardA, reverseB, threshold);
+  if (c2) candidates.push(c2);
+  const c3 = buildCandidateLoop(reverseA, forwardB, threshold);
+  if (c3) candidates.push(c3);
+  const c4 = buildCandidateLoop(reverseA, reverseB, threshold);
+  if (c4) candidates.push(c4);
 
-  return null;
+  if (candidates.length === 0) return null;
+
+  // Favor smoother loop with longer boundary (reduces accidental straight-chord closures)
+  let best = candidates[0];
+  let bestLen = -Infinity;
+  candidates.forEach(c => {
+    let len = 0;
+    for (let i = 1; i < c.length; i++) len += distance(c[i - 1], c[i]);
+    if (len > bestLen) {
+      best = c;
+      bestLen = len;
+    }
+  });
+  return best;
 };
 
 export const findClosedLoopFromStrokes = (strokes: Stroke[], threshold: number): { points: Point[]; strokeIds: string[] } | null => {
@@ -104,12 +124,11 @@ export const findPaintTarget = (
     }
   }
 
-  // Two-stroke clung loop targets
   for (let i = displayedStrokes.length - 1; i >= 0; i--) {
     for (let j = i - 1; j >= 0; j--) {
       const loopPoints = buildTwoStrokeLoopPoints(displayedStrokes[i], displayedStrokes[j], threshold);
       if (!loopPoints) continue;
-      const sampledLoop = sampleStroke({ ...displayedStrokes[i], points: loopPoints }, 10);
+      const sampledLoop = sampleStroke({ ...displayedStrokes[i], points: loopPoints }, 12);
       if (sampledLoop.length < 3) continue;
       if (pointInPolygon(clickPos, sampledLoop)) {
         return {

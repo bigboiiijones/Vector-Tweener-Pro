@@ -54,7 +54,7 @@ const App: React.FC = () => {
       overwriteTargets: false, 
       swapTargets: false,
       autoMatchStrategy: 'INDEX',
-      snappingEnabled: true,
+      snappingEnabled: false,
       crossLayerSnapping: false,
       crossLayerPainting: true,
       crossGroupPainting: true,
@@ -74,9 +74,9 @@ const App: React.FC = () => {
       drawFill: false,
       gapClosingDistance: 20,
       paintBucketMode: 'FILL',
-      bezierAdaptive: true,
-      transformEditAllLayers: false,
-      bindLinkedFillsOnTransform: true
+      bezierAdaptive: false,
+      transformEditAllLayers: true,
+      bindLinkedFillsOnTransform: false
   });
   
   const svgRef = useRef<SVGSVGElement>(null);

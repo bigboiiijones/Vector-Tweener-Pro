@@ -50,6 +50,7 @@ export const useTransformTool = (
     const [dragStart, setDragStart] = useState<Point | null>(null);
     const [initialStrokesMap, setInitialStrokesMap] = useState<Map<string, Stroke>>(new Map());
     const [centroid, setCentroid] = useState<Point | null>(null);
+    const [transformCenter, setTransformCenter] = useState<Point | null>(null);
     const [previewStrokes, setPreviewStrokes] = useState<Map<string, Stroke>>(new Map());
     const [snapIndicator, setSnapIndicator] = useState<Point | null>(null);
     
@@ -61,6 +62,26 @@ export const useTransformTool = (
         : strokes.filter(s => s.layerId === activeLayerId);
 
 
+
+    const getSelectionCenter = (sel: TransformSelection[], strokeSource: Stroke[]): Point | null => {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        let has = false;
+        sel.forEach(s => {
+            const stroke = strokeSource.find(st => st.id === s.strokeId);
+            if (!stroke) return;
+            s.pointIndices.forEach(idx => {
+                const p = stroke.points[idx];
+                minX = Math.min(minX, p.x);
+                minY = Math.min(minY, p.y);
+                maxX = Math.max(maxX, p.x);
+                maxY = Math.max(maxY, p.y);
+                has = true;
+            });
+        });
+        if (!has) return null;
+        return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+    };
+
     const updateCentroid = (sel: TransformSelection[], strokeSource: Stroke[]) => {
         const allSelectedPoints: Point[] = [];
         sel.forEach(s => {
@@ -71,8 +92,10 @@ export const useTransformTool = (
         });
         if (allSelectedPoints.length > 0) {
             setCentroid(getPointsCentroid(allSelectedPoints));
+            setTransformCenter(getSelectionCenter(sel, strokeSource));
         } else {
             setCentroid(null);
+            setTransformCenter(null);
         }
     };
 
@@ -209,13 +232,39 @@ export const useTransformTool = (
             
             if (bindLinkedFillsOnTransform) {
                 const selectedIds = new Set(newSelection.map(s => s.strokeId));
+                const sourcePoints: Point[] = [];
+                newSelection.forEach(sel => {
+                    const source = strokes.find(st => st.id === sel.strokeId);
+                    if (!source) return;
+                    sel.pointIndices.forEach(idx => sourcePoints.push(source.points[idx]));
+                });
+
                 const linkedFillSelections: TransformSelection[] = [];
                 strokes.forEach(st => {
                     if (!st.bindToLinkedStrokes || !st.linkedStrokeIds || st.linkedStrokeIds.length === 0) return;
-                    if (st.linkedStrokeIds.some(id => selectedIds.has(id))) {
-                        linkedFillSelections.push({ strokeId: st.id, pointIndices: new Set(st.points.map((_, idx) => idx)) });
+                    if (!st.linkedStrokeIds.some(id => selectedIds.has(id))) return;
+
+                    const pointIndices = new Set<number>();
+                    if (sourcePoints.length <= 2) {
+                        sourcePoints.forEach(src => {
+                            let bestIdx = 0;
+                            let bestDist = Infinity;
+                            st.points.forEach((p, idx) => {
+                                const d = distance(src, p);
+                                if (d < bestDist) {
+                                    bestDist = d;
+                                    bestIdx = idx;
+                                }
+                            });
+                            pointIndices.add(bestIdx);
+                        });
+                    } else {
+                        st.points.forEach((_, idx) => pointIndices.add(idx));
                     }
+
+                    linkedFillSelections.push({ strokeId: st.id, pointIndices });
                 });
+
                 if (linkedFillSelections.length > 0) {
                     const existingIds = new Set(newSelection.map(sel => sel.strokeId));
                     linkedFillSelections.forEach(sel => {
@@ -419,22 +468,40 @@ export const useTransformTool = (
                     if (newP.cp1) { newP.cp1 = { x: newP.cp1.x + delta.x, y: newP.cp1.y + delta.y }; }
                     if (newP.cp2) { newP.cp2 = { x: newP.cp2.x + delta.x, y: newP.cp2.y + delta.y }; }
                 }
-                else if (effectiveMode === TransformMode.ROTATE && centroid) {
-                    const startAngle = Math.atan2(startPoint.y - centroid.y, startPoint.x - centroid.x);
-                    const currAngle = Math.atan2(pos.y - centroid.y, pos.x - centroid.x);
+                else if (effectiveMode === TransformMode.ROTATE && transformCenter) {
+                    const startAngle = Math.atan2(startPoint.y - transformCenter.y, startPoint.x - transformCenter.x);
+                    const currAngle = Math.atan2(pos.y - transformCenter.y, pos.x - transformCenter.x);
                     const angle = currAngle - startAngle;
-                    newP = rotatePoint(p, centroid, angle);
-                    if (p.cp1) newP.cp1 = rotatePoint(p.cp1 as Point, centroid, angle);
-                    if (p.cp2) newP.cp2 = rotatePoint(p.cp2 as Point, centroid, angle);
+                    newP = rotatePoint(p, transformCenter, angle);
+                    if (p.cp1) newP.cp1 = rotatePoint(p.cp1 as Point, transformCenter, angle);
+                    if (p.cp2) newP.cp2 = rotatePoint(p.cp2 as Point, transformCenter, angle);
                 }
-                else if (effectiveMode === TransformMode.SCALE && centroid) {
-                    const startDist = distance(startPoint, centroid);
+                else if (effectiveMode === TransformMode.SCALE && transformCenter) {
+                    const startDist = distance(startPoint, transformCenter);
                     if (startDist > 1) {
-                        const currDist = distance(pos, centroid);
+                        const currDist = distance(pos, transformCenter);
                         const scale = currDist / startDist;
-                        newP = scalePoint(p, centroid, scale);
-                        if (p.cp1) newP.cp1 = scalePoint(p.cp1 as Point, centroid, scale);
-                        if (p.cp2) newP.cp2 = scalePoint(p.cp2 as Point, centroid, scale);
+                        newP = scalePoint(p, transformCenter, scale);
+                        if (p.cp1) newP.cp1 = scalePoint(p.cp1 as Point, transformCenter, scale);
+                        if (p.cp2) newP.cp2 = scalePoint(p.cp2 as Point, transformCenter, scale);
+                    }
+                }
+                else if (effectiveMode === TransformMode.SKEW && transformCenter) {
+                    const skewX = (effectivePos.x - startPoint.x) * 0.002;
+                    const skewY = (effectivePos.y - startPoint.y) * 0.002;
+                    const rx = p.x - transformCenter.x;
+                    const ry = p.y - transformCenter.y;
+                    newP.x = transformCenter.x + rx + ry * skewX;
+                    newP.y = transformCenter.y + ry + rx * skewY;
+                    if (p.cp1) {
+                        const c1x = p.cp1.x - transformCenter.x;
+                        const c1y = p.cp1.y - transformCenter.y;
+                        newP.cp1 = { x: transformCenter.x + c1x + c1y * skewX, y: transformCenter.y + c1y + c1x * skewY };
+                    }
+                    if (p.cp2) {
+                        const c2x = p.cp2.x - transformCenter.x;
+                        const c2y = p.cp2.y - transformCenter.y;
+                        newP.cp2 = { x: transformCenter.x + c2x + c2y * skewX, y: transformCenter.y + c2y + c2x * skewY };
                     }
                 }
                 return newP;
@@ -446,7 +513,7 @@ export const useTransformTool = (
         });
 
         setPreviewStrokes(newPreviews);
-    }, [dragStart, selection, initialStrokesMap, centroid, mode, snappingEnabled, strokes, dragAnchor, activeLayerId, crossLayerSnapping]);
+    }, [dragStart, selection, initialStrokesMap, centroid, transformCenter, mode, snappingEnabled, strokes, dragAnchor, activeLayerId, crossLayerSnapping]);
 
     const handleUp = useCallback((onCommit: (strokes: Stroke[]) => void) => {
         setDragStart(null);
