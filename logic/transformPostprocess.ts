@@ -10,7 +10,6 @@ export interface TransformPostProcessOptions {
   closeThreshold: number;
 }
 
-
 const adaptClosedSeamToBezier = (points: Point[]) => {
   if (points.length < 4) return;
   const first = points[0];
@@ -81,8 +80,10 @@ export const postProcessTransformedStrokes = (
       if (stroke.points.length < 3 || stroke.isClosed) return stroke;
       const first = stroke.points[0];
       const last = stroke.points[stroke.points.length - 1];
+
       if (distance(first, last) <= options.closeThreshold) {
         const closedPoints = [...stroke.points.slice(0, -1), first];
+
         if (options.bezierAdaptive) {
           adaptClosedSeamToBezier(closedPoints);
           adaptJointToBezier(closedPoints, Math.max(1, closedPoints.length - 2));
@@ -92,10 +93,13 @@ export const postProcessTransformedStrokes = (
         return {
           ...stroke,
           isClosed: true,
-          fillColor: options.closeCreatesFill ? (stroke.fillColor || options.fillColor) : stroke.fillColor,
+          fillColor: options.closeCreatesFill
+            ? (stroke.fillColor || options.fillColor)
+            : stroke.fillColor,
           points: closedPoints
         };
       }
+
       return stroke;
     });
   }
@@ -122,6 +126,7 @@ export const postProcessTransformedStrokes = (
           const mergedPoints = [...mergedStroke.points, ...b.points.slice(1)];
           const incomingJoin = mergedStroke.points[mergedStroke.points.length - 1];
           const outgoingJoin = b.points[0];
+
           mergedPoints[joinIndex] = {
             ...mergedPoints[joinIndex],
             cp1: mergedPoints[joinIndex].cp1 || incomingJoin.cp1,
