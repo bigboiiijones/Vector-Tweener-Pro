@@ -1,3 +1,4 @@
+import { Stroke } from '../types';
 import { Point, Stroke } from '../types';
 import { distance } from '../utils/mathUtils';
 
@@ -72,8 +73,8 @@ const adaptJointToBezier = (points: Point[], joinIndex: number) => {
 
 export const postProcessTransformedStrokes = (
   strokes: Stroke[],
+  options: { autoClose: boolean; autoMerge: boolean; closeThreshold: number }
   options: TransformPostProcessOptions
-  options: { autoClose: boolean; autoMerge: boolean; bezierAdaptive: boolean; closeCreatesFill: boolean; fillColor: string; closeThreshold: number }
 ): Stroke[] => {
   let next = [...strokes];
 
@@ -93,6 +94,8 @@ export const postProcessTransformedStrokes = (
         return {
           ...stroke,
           isClosed: true,
+          fillColor: stroke.fillColor || '#000000',
+          points: [...stroke.points.slice(0, -1), first]
           fillColor: options.closeCreatesFill ? (stroke.fillColor || options.fillColor) : stroke.fillColor,
           points: closedPoints
         };
@@ -135,6 +138,7 @@ export const postProcessTransformedStrokes = (
 
           mergedStroke = {
             ...mergedStroke,
+            points: [...mergedStroke.points, ...b.points.slice(1)]
             points: mergedPoints
           };
           consumed.add(b.id);
