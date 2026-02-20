@@ -73,10 +73,8 @@ const adaptJointToBezier = (points: Point[], joinIndex: number) => {
 
 export const postProcessTransformedStrokes = (
   strokes: Stroke[],
-  options: { autoClose: boolean; autoMerge: boolean; closeThreshold: number }
   options: TransformPostProcessOptions
 ): Stroke[] => {
-  let next = [...strokes];
 
   if (options.autoClose) {
     next = next.map((stroke) => {
