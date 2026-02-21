@@ -249,7 +249,7 @@ export const useTransformTool = (
             const handles = getBoxHandles(rawBounds, 26);
             const scaleHit = handles.scaleHandles
                 .map(h => ({ h, d: distance(pos, h.point) }))
-                .filter(item => item.d <= 16)
+                .filter(item => item.d <= 20)
                 .sort((a, b) => a.d - b.d)[0];
             if (scaleHit) {
                 setActiveBoxHandle({ kind: scaleHit.h.kind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: scaleHit.h.point });
@@ -261,7 +261,7 @@ export const useTransformTool = (
 
             const outerHit = handles.outerHandles
                 .map(h => ({ h, d: distance(pos, h.point) }))
-                .filter(item => item.d <= 12)
+                .filter(item => item.d <= 18)
                 .sort((a, b) => a.d - b.d)[0];
             if (outerHit) {
                 setActiveBoxHandle({ kind: outerHit.h.kind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: outerHit.h.point });
@@ -273,8 +273,7 @@ export const useTransformTool = (
 
             const pointerInOuterBounds = pos.x >= handles.outer.x && pos.x <= handles.outer.x + handles.outer.w && pos.y >= handles.outer.y && pos.y <= handles.outer.y + handles.outer.h;
             const pointerInInnerBounds = pos.x >= rawBounds.x && pos.x <= rawBounds.x + rawBounds.w && pos.y >= rawBounds.y && pos.y <= rawBounds.y + rawBounds.h;
-            const nearAnyHandle = [...handles.scaleHandles, ...handles.outerHandles].some(h => distance(pos, h.point) <= 18);
-            if (pointerInOuterBounds && !pointerInInnerBounds && !nearAnyHandle) {
+            if (pointerInOuterBounds && !pointerInInnerBounds) {
                 setActiveBoxHandle({
                     kind: 'rotate-ring',
                     bounds: rawBounds,
@@ -471,8 +470,12 @@ export const useTransformTool = (
                         const movingStartY = activeBoxHandle.handlePoint.y;
                         const anchor = isCtrl ? activeBoxHandle.handlePoint : { x: oppositeX, y: oppositeY };
 
-                        let sx = (effectivePos.x - anchor.x) / Math.max(0.001, movingStartX - anchor.x);
-                        let sy = (effectivePos.y - anchor.y) / Math.max(0.001, movingStartY - anchor.y);
+                        const dx0 = movingStartX - anchor.x;
+                        const dy0 = movingStartY - anchor.y;
+                        const denomX = Math.abs(dx0) < 8 ? (dx0 < 0 ? -8 : 8) : dx0;
+                        const denomY = Math.abs(dy0) < 8 ? (dy0 < 0 ? -8 : 8) : dy0;
+                        let sx = (effectivePos.x - anchor.x) / denomX;
+                        let sy = (effectivePos.y - anchor.y) / denomY;
                         if (handle === 'n' || handle === 's') sx = 1;
                         if (handle === 'e' || handle === 'w') sy = 1;
                         if (!Number.isFinite(sx)) sx = 1;

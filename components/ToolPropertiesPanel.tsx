@@ -243,7 +243,7 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                         <button
                             onClick={() => onSetTransformPointsSharp?.()}
                             disabled={!hasTransformPointSelection}
-                            className={`p-2 rounded text-[11px] font-semibold border ${hasTransformPointSelection ? 'bg-gray-700 text-gray-100 border-gray-500 hover:bg-gray-600' : 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'}`}
+                            className={`p-2 rounded text-[11px] font-semibold border transition-colors active:scale-[0.98] ${hasTransformPointSelection ? 'bg-gray-700 text-gray-100 border-gray-500 hover:bg-gray-600' : 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'}`}
                             title="Convert selected points to sharp corners"
                         >
                             Sharp Corner
@@ -251,10 +251,10 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                         <button
                             onClick={() => onSetTransformPointsCurve?.()}
                             disabled={!hasTransformPointSelection}
-                            className={`p-2 rounded text-[11px] font-semibold border ${hasTransformPointSelection ? 'bg-purple-900/40 text-purple-100 border-purple-500 hover:bg-purple-800/50' : 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'}`}
+                            className={`p-2 rounded text-[11px] font-semibold border transition-colors active:scale-[0.98] ${hasTransformPointSelection ? 'bg-gray-700 text-gray-100 border-gray-500 hover:bg-gray-600' : 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'}`}
                             title="Set selected points to bezier curve (re-click resets curve handles)"
                         >
-                            Better Curve
+                            Bezier Curve
                         </button>
                     </div>
                 )}
