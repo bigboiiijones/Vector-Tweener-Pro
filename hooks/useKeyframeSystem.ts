@@ -84,16 +84,53 @@ export const useKeyframeSystem = (totalFrames: number) => {
         return { prev, next };
     }, []);
 
+    const getActiveSwitchChildAtFrame = useCallback((switchLayerId: string, frameIndex: number, currentLayers: Layer[]): string | undefined => {
+        const switchKeys = keyframes
+            .filter(k => k.layerId === switchLayerId && typeof k.switchChildId === 'string' && k.index <= frameIndex)
+            .sort((a, b) => b.index - a.index);
+
+        if (switchKeys.length > 0) {
+            return switchKeys[0].switchChildId;
+        }
+
+        const directChild = currentLayers.find(l => l.parentId === switchLayerId && l.type === 'VECTOR');
+        return directChild?.id;
+    }, [keyframes]);
+
     // Get Composite Frame Content (All Visible Layers)
     const getFrameContent = useCallback((currentFrameIndex: number, strategy: AutoMatchStrategy = 'INDEX', layers: Layer[] = []) => {
         let allStrokes: Stroke[] = [];
         
         // Iterate visible vector layers
+        const switchActivationMap = new Map<string, string | undefined>();
         layers.forEach(layer => {
-             if (layer.type !== 'VECTOR' || !layer.isVisible) return;
-             
+            if (layer.type === 'SWITCH') {
+                switchActivationMap.set(layer.id, getActiveSwitchChildAtFrame(layer.id, currentFrameIndex, layers));
+            }
+        });
+
+        const isLayerRenderable = (layer: Layer) => {
+            if (layer.type !== 'VECTOR' || !layer.isVisible) return false;
+
+            let currentParentId = layer.parentId;
+            while (currentParentId) {
+                const parent = layers.find(l => l.id === currentParentId);
+                if (!parent || !parent.isVisible) return false;
+                if (parent.type === 'SWITCH') {
+                    const activeChild = switchActivationMap.get(parent.id);
+                    if (activeChild !== layer.id) return false;
+                }
+                currentParentId = parent.parentId;
+            }
+
+            return true;
+        };
+
+        layers.forEach(layer => {
+             if (!isLayerRenderable(layer)) return;
+
              const exactKeyframe = keyframes.find(k => k.layerId === layer.id && k.index === currentFrameIndex);
-             
+
              if (exactKeyframe) {
                  allStrokes = [...allStrokes, ...exactKeyframe.strokes];
              } else {
@@ -106,7 +143,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
         });
 
         return allStrokes;
-    }, [keyframes, groupBindings, getLayerContext]);
+    }, [keyframes, groupBindings, getLayerContext, getActiveSwitchChildAtFrame]);
 
     // Get Context for Active Layer (used for UI states, onionskin, etc of the active work area)
     const getTweenContext = useCallback((currentFrameIndex: number, activeLayerId?: string) => {
@@ -808,6 +845,35 @@ export const useKeyframeSystem = (totalFrames: number) => {
          setGroupBindings(prev => [...prev, { id: uuidv4(), sourceFrameIndex: sourceIndex, targetFrameIndex: targetIndex, sourceStrokeIds: sourceIds, targetStrokeIds: targetIds }]);
     }, []);
 
+
+    const setSwitchSelection = useCallback((switchLayerId: string, childLayerId: string, frameIndex: number) => {
+        setKeyframes(prev => {
+            const next = [...prev];
+            const existingIdx = next.findIndex(k => k.layerId === switchLayerId && k.index === frameIndex);
+
+            if (existingIdx !== -1) {
+                next[existingIdx] = {
+                    ...next[existingIdx],
+                    switchChildId: childLayerId,
+                    type: 'KEY'
+                };
+                return next;
+            }
+
+            next.push({
+                id: uuidv4(),
+                layerId: switchLayerId,
+                index: frameIndex,
+                type: 'KEY',
+                strokes: [],
+                motionPaths: [],
+                switchChildId: childLayerId,
+                easing: 'LINEAR'
+            });
+            return next;
+        });
+    }, []);
+
     const setFramePairBindings = useCallback((sIdx: number, tIdx: number, newBinds: any[]) => {
          // simplified for brevity
          setGroupBindings(prev => [...prev, ...newBinds.map((b: any) => ({...b, id: uuidv4(), sourceFrameIndex: sIdx, targetFrameIndex: tIdx}))]);
@@ -836,6 +902,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
         updateEasing,
         createBinding,
         setFramePairBindings,
+        setSwitchSelection,
         moveKeyframes, // Replaces moveFrames
         moveCameraFrames,
         deleteFrames, // Updated

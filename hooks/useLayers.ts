@@ -19,7 +19,7 @@ export const useLayers = () => {
             for (let i = children.length - 1; i >= 0; i--) {
                 const layer = children[i];
                 result.push({ ...layer, depth });
-                if (layer.type === 'GROUP' && layer.isExpanded) {
+                if ((layer.type === 'GROUP' || layer.type === 'SWITCH') && layer.isExpanded) {
                     process(layer.id, depth + 1);
                 }
             }
@@ -34,7 +34,7 @@ export const useLayers = () => {
         setLayers(prev => {
             const parentId = null; 
             const count = prev.filter(l => l.type === type).length + 1;
-            const name = type === 'GROUP' ? `Group ${count}` : `Layer ${count}`;
+            const name = type === 'GROUP' ? `Group ${count}` : type === 'SWITCH' ? `Switch ${count}` : `Layer ${count}`;
             
             const newLayer: Layer = {
                 id: uuidv4(),
@@ -164,6 +164,28 @@ export const useLayers = () => {
         setLayers(prev => prev.map(l => l.id === id ? { ...l, isSynced: !l.isSynced } : l));
     }, []);
 
+
+    const convertGroupToSwitch = useCallback((id: string) => {
+        setLayers(prev => prev.map(l => {
+            if (l.id !== id || l.type !== 'GROUP') return l;
+            return { ...l, type: 'SWITCH', name: l.name.startsWith('Switch') ? l.name : l.name.replace(/^Group/i, 'Switch') };
+        }));
+    }, []);
+
+    const getVectorDescendants = useCallback((layerId: string): string[] => {
+        const descendants: string[] = [];
+        const queue = [layerId];
+        while (queue.length > 0) {
+            const currentId = queue.shift()!;
+            layers.forEach(layer => {
+                if (layer.parentId !== currentId) return;
+                if (layer.type === 'VECTOR') descendants.push(layer.id);
+                else queue.push(layer.id);
+            });
+        }
+        return descendants;
+    }, [layers]);
+
     const getVisibleLayerIds = useCallback(() => {
         const visibleIds = new Set<string>();
         const layerMap = new Map<string, Layer>();
@@ -193,6 +215,7 @@ export const useLayers = () => {
         activeLayerId,
         selectedLayerIds,
         addLayer,
+        convertGroupToSwitch,
         moveLayer,
         deleteSelectedLayers,
         selectLayer,
@@ -200,6 +223,7 @@ export const useLayers = () => {
         toggleLock,
         toggleExpand,
         toggleSync,
-        getVisibleLayerIds
+        getVisibleLayerIds,
+        getVectorDescendants
     };
 };
