@@ -2,13 +2,22 @@ import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { Keyframe, ProjectSettings, CameraKeyframe, Layer } from '../types';
 import { TimelineSettings } from './TimelineSettings';
-import { Trash2, Video, Folder, FolderOpen, Image as ImageIcon, Link2, Unlink, Plus, GitMerge } from 'lucide-react';
+import { Trash2, Video, Folder, FolderOpen, Image as ImageIcon, Link2, Unlink, Plus, GitMerge, Bone } from 'lucide-react';
+import type { BoneKeyframe, Skeleton } from '../rigging/riggingTypes';
 
 interface TimelineProps {
   totalFrames: number;
   currentFrameIndex: number;
   keyframes: Keyframe[];
   cameraKeyframes: CameraKeyframe[];
+  // Bone timeline
+  boneKeyframes: BoneKeyframe[];
+  skeletons: Skeleton[];
+  isRigMode: boolean;
+  onAddBoneKeyframe: (channels?: import('../rigging/riggingTypes').BoneKeyChannel[]) => void;
+  onDeleteBoneKeyframes: (frameIndices: number[], skeletonId: string, channels?: import('../rigging/riggingTypes').BoneKeyChannel[]) => void;
+  keyAllChannels: boolean;
+  onSetKeyAllChannels: (v: boolean) => void;
   layers: Layer[];
   activeLayerId: string;
   onSeek: (frame: number) => void;
@@ -49,6 +58,13 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
   currentFrameIndex,
   keyframes,
   cameraKeyframes,
+  boneKeyframes,
+  skeletons,
+  isRigMode,
+  onAddBoneKeyframe,
+  onDeleteBoneKeyframes,
+  keyAllChannels,
+  onSetKeyAllChannels,
   layers,
   activeLayerId,
   onSeek,
@@ -76,8 +92,11 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
   // Selection
   const [selectedKeyframeIds, setSelectedKeyframeIds] = useState<Set<string>>(new Set());
   const [selectedCameraIndices, setSelectedCameraIndices] = useState<Set<number>>(new Set());
+  const [selectedBoneFrameIndices, setSelectedBoneFrameIndices] = useState<Set<number>>(new Set());
   const [lastClicked, setLastClicked] = useState<{ layerId: string, index: number } | null>(null);
   const [lastCameraClickedIndex, setLastCameraClickedIndex] = useState<number | null>(null);
+  // Which skeleton bone tracks are expanded to show per-channel sub-rows
+  const [expandedBoneSkeletons, setExpandedBoneSkeletons] = useState<Set<string>>(new Set());
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -490,6 +509,179 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
                          })}
                     </div>
                 </div>
+
+                {/* BONE KEYFRAME TRACKS — expandable per-channel rows */}
+                {isRigMode && skeletons.length > 0 && skeletons.map(skeleton => {
+                  const skeletonBoneKeys = boneKeyframes.filter(kf => kf.skeletonId === skeleton.id);
+                  const keysByFrame = new Map(skeletonBoneKeys.map(kf => [kf.frameIndex, kf]));
+                  const isExpanded = expandedBoneSkeletons.has(skeleton.id);
+
+                  // Per-channel helpers
+                  type BKC = import('../rigging/riggingTypes').BoneKeyChannel;
+                  const CHANNELS: { ch: BKC; label: string; color: string; ring: string; dot: string }[] = [
+                    { ch: 'translate', label: 'T',  color: 'bg-sky-500',    ring: 'ring-sky-300',    dot: 'bg-sky-400' },
+                    { ch: 'rotate',    label: 'R',  color: 'bg-violet-500', ring: 'ring-violet-300', dot: 'bg-violet-400' },
+                    { ch: 'scale',     label: 'S',  color: 'bg-amber-500',  ring: 'ring-amber-300',  dot: 'bg-amber-400' },
+                  ];
+
+                  // Check which channels exist at a frame
+                  const channelAtFrame = (i: number, ch: BKC): boolean => {
+                    const kf = keysByFrame.get(i);
+                    if (!kf) return false;
+                    // Check any bone has this channel keyed
+                    return Object.values(kf.boneTransforms).some(bt => {
+                      const keyed = bt.keyedChannels ?? ['translate','rotate','scale'];
+                      return keyed.includes(ch);
+                    });
+                  };
+
+                  const hasAnyKeyAtFrame = (i: number) => keysByFrame.has(i);
+
+                  return (
+                    <React.Fragment key={skeleton.id}>
+                      {/* Master row */}
+                      <div className="flex h-7 border-b border-emerald-800/40 bg-emerald-950/20">
+                        <div className="sticky left-0 w-64 bg-gray-800 border-r border-emerald-800/40 z-30 flex items-center px-2 justify-between">
+                          <div className="flex items-center gap-1 text-xs text-emerald-300 font-bold">
+                            {/* Expand/collapse */}
+                            <button
+                              onClick={() => setExpandedBoneSkeletons(prev => {
+                                const n = new Set(prev);
+                                n.has(skeleton.id) ? n.delete(skeleton.id) : n.add(skeleton.id);
+                                return n;
+                              })}
+                              className="text-emerald-600 hover:text-emerald-300 p-0.5"
+                              title={isExpanded ? 'Collapse channels' : 'Expand per-channel rows'}
+                            >
+                              {isExpanded
+                                ? <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 3 L5 7 L8 3" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>
+                                : <svg width="10" height="10" viewBox="0 0 10 10"><path d="M3 2 L7 5 L3 8" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>
+                              }
+                            </button>
+                            <Bone size={11} className="text-emerald-400 shrink-0" />
+                            <span className="truncate text-[10px]">{skeleton.name}</span>
+                            {/* Key-All toggle pill */}
+                            <button
+                              onClick={() => onSetKeyAllChannels(!keyAllChannels)}
+                              title={keyAllChannels ? 'Key All ON — every move keys all channels. Click to key only touched channel.' : 'Key One — only the used channel is keyed. Click to key all channels.'}
+                              className={`ml-1 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wide border transition-colors shrink-0 ${
+                                keyAllChannels
+                                  ? 'bg-emerald-700 border-emerald-500 text-emerald-100'
+                                  : 'bg-gray-700 border-gray-600 text-gray-400'
+                              }`}
+                            >
+                              {keyAllChannels ? 'All' : '1ch'}
+                            </button>
+                          </div>
+                          <div className="flex gap-1 opacity-60 hover:opacity-100 shrink-0">
+                            <button onClick={() => onAddBoneKeyframe()} className="p-1 hover:text-emerald-300" title="Record bone key (all channels)"><Plus size={10}/></button>
+                            <button
+                              onClick={() => {
+                                const sel = Array.from(selectedBoneFrameIndices).filter(i => keysByFrame.has(i));
+                                if (sel.length > 0) onDeleteBoneKeyframes(sel, skeleton.id);
+                              }}
+                              className="p-1 hover:text-red-400" title="Delete selected bone keys"><Trash2 size={10}/></button>
+                          </div>
+                        </div>
+                        {/* Master track cells — show combined diamond when any channel is keyed */}
+                        <div className="flex relative">
+                          {Array.from({ length: totalFrames }).map((_, i) => {
+                            const hasKey = hasAnyKeyAtFrame(i);
+                            const isSel = hasKey && selectedBoneFrameIndices.has(i);
+                            const isCurrent = i === currentFrameIndex;
+                            // Show which channels are present as mini colored dots
+                            const presentChs = CHANNELS.filter(c => channelAtFrame(i, c.ch));
+                            return (
+                              <div
+                                key={i}
+                                className={`flex-shrink-0 w-6 h-full border-r border-gray-700/20 relative cursor-pointer ${isCurrent ? 'bg-emerald-500/5' : ''}`}
+                                onClick={(e) => {
+                                  if (hasKey) {
+                                    setSelectedBoneFrameIndices(prev => {
+                                      const next = new Set(e.ctrlKey || e.metaKey ? prev : []);
+                                      next.has(i) ? next.delete(i) : next.add(i);
+                                      return next;
+                                    });
+                                  } else {
+                                    onSeek(i);
+                                  }
+                                }}
+                              >
+                                {isCurrent && <div className="absolute inset-0 border-l border-red-500 pointer-events-none opacity-30"/>}
+                                {hasKey && !isExpanded && (
+                                  <div className={`absolute top-1.5 left-1 w-4 h-4 rotate-45 border border-black/40 cursor-pointer ${isSel ? 'bg-white ring-1 ring-emerald-400' : 'bg-emerald-500'}`}>
+                                    {/* micro channel dots inside diamond */}
+                                    {presentChs.length < 3 && (
+                                      <div className="absolute -rotate-45 inset-0 flex items-center justify-center gap-px">
+                                        {presentChs.map(c => (
+                                          <div key={c.ch} className={`w-1 h-1 rounded-full ${c.dot}`} />
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Per-channel sub-rows (only when expanded) */}
+                      {isExpanded && CHANNELS.map(({ ch, label, color, ring, dot }) => (
+                        <div key={ch} className="flex h-5 border-b border-gray-700/20 bg-gray-900/40">
+                          <div className="sticky left-0 w-64 bg-gray-850 border-r border-gray-700/30 z-30 flex items-center px-3 gap-1.5" style={{ background: 'rgb(20,24,30)' }}>
+                            <div className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
+                            <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">
+                              {ch === 'translate' ? 'Position' : ch === 'rotate' ? 'Rotation' : 'Scale'}
+                            </span>
+                            <button
+                              onClick={() => onAddBoneKeyframe([ch])}
+                              className="ml-auto text-gray-600 hover:text-emerald-300 p-0.5"
+                              title={`Key ${ch} channel only`}
+                            ><Plus size={8}/></button>
+                            <button
+                              onClick={() => {
+                                const sel = Array.from(selectedBoneFrameIndices).filter(i => channelAtFrame(i, ch));
+                                if (sel.length > 0) onDeleteBoneKeyframes(sel, skeleton.id, [ch]);
+                              }}
+                              className="text-gray-600 hover:text-red-400 p-0.5"
+                              title={`Delete selected ${ch} keys`}
+                            ><Trash2 size={8}/></button>
+                          </div>
+                          <div className="flex relative">
+                            {Array.from({ length: totalFrames }).map((_, i) => {
+                              const hasChKey = channelAtFrame(i, ch);
+                              const isSel = hasChKey && selectedBoneFrameIndices.has(i);
+                              const isCurrent = i === currentFrameIndex;
+                              return (
+                                <div
+                                  key={i}
+                                  className={`flex-shrink-0 w-6 h-full border-r border-gray-700/10 relative cursor-pointer ${isCurrent ? 'bg-blue-500/5' : ''}`}
+                                  onClick={(e) => {
+                                    if (hasChKey) {
+                                      setSelectedBoneFrameIndices(prev => {
+                                        const next = new Set(e.ctrlKey || e.metaKey ? prev : []);
+                                        next.has(i) ? next.delete(i) : next.add(i);
+                                        return next;
+                                      });
+                                    } else {
+                                      onSeek(i);
+                                    }
+                                  }}
+                                >
+                                  {isCurrent && <div className="absolute inset-0 border-l border-red-500 pointer-events-none opacity-20"/>}
+                                  {hasChKey && (
+                                    <div className={`absolute top-1 left-2 w-2 h-2 rounded-full border border-black/30 ${isSel ? `bg-white ${ring} ring-1` : dot}`} />
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
 
                 {/* LAYER ROWS */}
                 {visibleRows.map(layer => {
