@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import { ToolType, DEFAULT_FPS, ToolOptions, TransformMode, ProjectSettings, DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT, DEFAULT_CAMERA_WIDTH, DEFAULT_CAMERA_HEIGHT, CameraTransform, ViewportTransform, Stroke } from './types';
 import { Toolbar } from './components/Toolbar';
@@ -105,21 +104,10 @@ const App: React.FC = () => {
   }, [layerSystem.layers, keyframeSystem.ensureInitialKeyframes]);
   
 
-  useEffect(() => {
-      const target = layerSystem.getSwitchActivationTarget(layerSystem.activeLayerId);
-      if (!target) return;
-
-      const currentSelection = keyframeSystem.getSwitchSelectionAtFrame(target.switchLayerId, currentFrameIndex);
-      if (currentSelection === target.childId) return;
-
-      keyframeSystem.setSwitchSelection(target.switchLayerId, target.childId, currentFrameIndex);
-  }, [
-      currentFrameIndex,
-      layerSystem.activeLayerId,
-      layerSystem.getSwitchActivationTarget,
-      keyframeSystem.getSwitchSelectionAtFrame,
-      keyframeSystem.setSwitchSelection
-  ]);
+  // NOTE: Switch layer selection is set explicitly via the Timeline right-click context menu
+  // (onSetSwitchSelection). We do NOT auto-set switch selection on frame navigation or active
+  // layer change because that would overwrite per-frame keyframe data with whatever child
+  // happens to be active — causing the "applies across the whole timeline" bug.
 
   // Get content for the composite view (all layers)
   const displayedStrokes = keyframeSystem.getFrameContent(currentFrameIndex, toolOptions.autoMatchStrategy, layerSystem.layers, layerSystem.activeLayerId);
@@ -434,6 +422,7 @@ const App: React.FC = () => {
                 flattenedLayers={layerSystem.flattenedLayers}
                 selectedLayerIds={layerSystem.selectedLayerIds}
                 activeLayerId={layerSystem.activeLayerId}
+                currentFrameIndex={currentFrameIndex}
                 onSelect={layerSystem.selectLayer}
                 onToggleVis={layerSystem.toggleVisibility}
                 onToggleLock={layerSystem.toggleLock}
@@ -444,6 +433,7 @@ const App: React.FC = () => {
                 onDelete={layerSystem.deleteSelectedLayers}
                 onConvertGroupToSwitch={layerSystem.convertGroupToSwitch}
                 onMoveLayer={layerSystem.moveLayer}
+                onSetSwitchSelection={keyframeSystem.setSwitchSelection}
             />
         </div>
 
