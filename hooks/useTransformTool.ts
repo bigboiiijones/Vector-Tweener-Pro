@@ -556,46 +556,9 @@ export const useTransformTool = (
                         }
                     }
                 } else {
-                    const totalPoints = selection.reduce((acc, s) => acc + s.pointIndices.size, 0);
-                    const effectiveMode = totalPoints < 2 ? TransformMode.TRANSLATE : mode;
-                    if (effectiveMode === TransformMode.TRANSLATE) {
-                        newP = { x: p.x + delta.x, y: p.y + delta.y };
-                        if (p.cp1) newP.cp1 = { x: p.cp1.x + delta.x, y: p.cp1.y + delta.y };
-                        if (p.cp2) newP.cp2 = { x: p.cp2.x + delta.x, y: p.cp2.y + delta.y };
-                    } else if (effectiveMode === TransformMode.ROTATE && centroid) {
-                        const a0 = Math.atan2(startPoint.y - centroid.y, startPoint.x - centroid.x);
-                        const a1 = Math.atan2(effectivePos.y - centroid.y, effectivePos.x - centroid.x);
-                        const angle = ((a1 - a0) * 180) / Math.PI;
-                        newP = rotatePoint(p, centroid, angle);
-                        if (p.cp1) newP.cp1 = rotatePoint(p.cp1, centroid, angle);
-                        if (p.cp2) newP.cp2 = rotatePoint(p.cp2, centroid, angle);
-                    } else if (effectiveMode === TransformMode.SCALE && transformCenter) {
-                        const sd = distance(startPoint, transformCenter);
-                        const cd = distance(effectivePos, transformCenter);
-                        if (sd > 0.001) {
-                            const s = cd / sd;
-                            newP = scalePoint(p, transformCenter, s);
-                            if (p.cp1) newP.cp1 = scalePoint(p.cp1, transformCenter, s);
-                            if (p.cp2) newP.cp2 = scalePoint(p.cp2, transformCenter, s);
-                        }
-                    } else if (effectiveMode === TransformMode.SKEW && transformCenter) {
-                        const skewX = (effectivePos.x - startPoint.x) * 0.002;
-                        const skewY = (effectivePos.y - startPoint.y) * 0.002;
-                        const rx = p.x - transformCenter.x;
-                        const ry = p.y - transformCenter.y;
-                        newP.x = transformCenter.x + rx + ry * skewX;
-                        newP.y = transformCenter.y + ry + rx * skewY;
-                        if (p.cp1) {
-                            const c1x = p.cp1.x - transformCenter.x;
-                            const c1y = p.cp1.y - transformCenter.y;
-                            newP.cp1 = { x: transformCenter.x + c1x + c1y * skewX, y: transformCenter.y + c1y + c1x * skewY };
-                        }
-                        if (p.cp2) {
-                            const c2x = p.cp2.x - transformCenter.x;
-                            const c2y = p.cp2.y - transformCenter.y;
-                            newP.cp2 = { x: transformCenter.x + c2x + c2y * skewX, y: transformCenter.y + c2y + c2x * skewY };
-                        }
-                    }
+                    newP = { x: p.x + delta.x, y: p.y + delta.y };
+                    if (p.cp1) newP.cp1 = { x: p.cp1.x + delta.x, y: p.cp1.y + delta.y };
+                    if (p.cp2) newP.cp2 = { x: p.cp2.x + delta.x, y: p.cp2.y + delta.y };
                 }
 
                 return newP;
