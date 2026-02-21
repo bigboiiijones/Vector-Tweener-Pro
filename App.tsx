@@ -351,6 +351,9 @@ const App: React.FC = () => {
                     selectedStrokeIds={selection.selectedStrokeIds}
                     updateSelectedStrokes={updateSelectedStrokes}
                     firstSelectedStroke={firstSelectedStroke}
+                    hasTransformPointSelection={interaction.transformSelection.length > 0}
+                    onSetTransformPointsSharp={interaction.setTransformPointsSharp}
+                    onSetTransformPointsCurve={interaction.setTransformPointsCurve}
                 />
 
                 <OverlayControls 

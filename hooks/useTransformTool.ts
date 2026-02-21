@@ -11,8 +11,8 @@ interface TransformSelection {
 
 type BoxHandleKind =
     | 'scale-nw' | 'scale-n' | 'scale-ne' | 'scale-e' | 'scale-se' | 'scale-s' | 'scale-sw' | 'scale-w'
-    | 'rotate-nw' | 'rotate-ne' | 'rotate-se' | 'rotate-sw'
-    | 'skew-n' | 'skew-e' | 'skew-s' | 'skew-w';
+    | 'rotate-ring'
+    | 'skew-n' | 'skew-ne' | 'skew-e' | 'skew-se' | 'skew-s' | 'skew-sw' | 'skew-w' | 'skew-nw';
 
 interface ActiveBoxHandle {
     kind: BoxHandleKind;
@@ -99,18 +99,28 @@ const getBoxHandles = (bounds: { x: number; y: number; w: number; h: number }, o
     ];
 
     const outerHandles: Array<{ kind: BoxHandleKind; point: Point }> = [
-        { kind: 'rotate-nw', point: { x: ox, y: oy } },
+        { kind: 'skew-nw', point: { x: ox, y: oy } },
         { kind: 'skew-n', point: { x: ocx, y: oy } },
-        { kind: 'rotate-ne', point: { x: ox + ow, y: oy } },
+        { kind: 'skew-ne', point: { x: ox + ow, y: oy } },
         { kind: 'skew-e', point: { x: ox + ow, y: ocy } },
-        { kind: 'rotate-se', point: { x: ox + ow, y: oy + oh } },
+        { kind: 'skew-se', point: { x: ox + ow, y: oy + oh } },
         { kind: 'skew-s', point: { x: ocx, y: oy + oh } },
-        { kind: 'rotate-sw', point: { x: ox, y: oy + oh } },
+        { kind: 'skew-sw', point: { x: ox, y: oy + oh } },
         { kind: 'skew-w', point: { x: ox, y: ocy } }
     ];
 
     return { scaleHandles, outerHandles, outer };
 };
+
+const pointInRect = (p: Point, r: { x: number; y: number; w: number; h: number }) =>
+    p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+
+const expandRect = (r: { x: number; y: number; w: number; h: number }, pad: number) => ({
+    x: r.x - pad,
+    y: r.y - pad,
+    w: r.w + pad * 2,
+    h: r.h + pad * 2
+});
 
 export const useTransformTool = (
     strokes: Stroke[],
@@ -169,7 +179,11 @@ export const useTransformTool = (
         }
     };
 
-    const getSelectionBounds = useCallback(() => getBoundsFromSelection(selection, strokes, 10), [selection, strokes]);
+    const getSelectionBounds = useCallback(() => {
+        const totalPoints = selection.reduce((acc, s) => acc + s.pointIndices.size, 0);
+        if (totalPoints < 2) return null;
+        return getBoundsFromSelection(selection, strokes, 10);
+    }, [selection, strokes]);
 
     const expandLinkedFillSelection = (baseSelection: TransformSelection[]) => {
         if (!bindLinkedFillsOnTransform) return baseSelection;
@@ -240,24 +254,117 @@ export const useTransformTool = (
         }
 
         const rawBounds = getBoundsFromSelection(selection, strokes, 0);
-        if (!bestHit && rawBounds && selection.length > 0) {
+        const totalSelectedPoints = selection.reduce((acc, s) => acc + s.pointIndices.size, 0);
+        if (!bestHit && rawBounds && selection.length > 0 && totalSelectedPoints >= 2) {
             const handles = getBoxHandles(rawBounds, 26);
-            const hitRadius = 14;
-            const outerFirst = [...handles.outerHandles, ...handles.scaleHandles];
-            const hitHandle = outerFirst.find(h => distance(pos, h.point) <= hitRadius);
-            if (hitHandle) {
-                setActiveBoxHandle({ kind: hitHandle.kind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: hitHandle.point });
+            const scaleHit = handles.scaleHandles
+                .map(h => ({ h, d: distance(pos, h.point) }))
+                .filter(item => item.d <= 12)
+                .sort((a, b) => a.d - b.d)[0];
+            if (scaleHit) {
+                setActiveBoxHandle({ kind: scaleHit.h.kind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: scaleHit.h.point });
                 setDragStart(pos);
                 const selectedIds = new Set(selection.map(s => s.strokeId));
                 setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
                 return true;
             }
 
-            if (pos.x >= rawBounds.x && pos.x <= rawBounds.x + rawBounds.w && pos.y >= rawBounds.y && pos.y <= rawBounds.y + rawBounds.h) {
+            const outerHit = handles.outerHandles
+                .map(h => ({ h, d: distance(pos, h.point) }))
+                .filter(item => item.d <= 12)
+                .sort((a, b) => a.d - b.d)[0];
+            if (outerHit) {
+                setActiveBoxHandle({ kind: outerHit.h.kind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: outerHit.h.point });
+                setDragStart(pos);
+                const selectedIds = new Set(selection.map(s => s.strokeId));
+                setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
+                return true;
+            }
+
+            const outerEdgeTol = 9;
+            const nearOuterTop = Math.abs(pos.y - handles.outer.y) <= outerEdgeTol && pos.x >= handles.outer.x && pos.x <= handles.outer.x + handles.outer.w;
+            const nearOuterBottom = Math.abs(pos.y - (handles.outer.y + handles.outer.h)) <= outerEdgeTol && pos.x >= handles.outer.x && pos.x <= handles.outer.x + handles.outer.w;
+            const nearOuterLeft = Math.abs(pos.x - handles.outer.x) <= outerEdgeTol && pos.y >= handles.outer.y && pos.y <= handles.outer.y + handles.outer.h;
+            const nearOuterRight = Math.abs(pos.x - (handles.outer.x + handles.outer.w)) <= outerEdgeTol && pos.y >= handles.outer.y && pos.y <= handles.outer.y + handles.outer.h;
+
+            if (nearOuterTop || nearOuterBottom || nearOuterLeft || nearOuterRight) {
+                const edgeKind: BoxHandleKind = nearOuterTop ? 'skew-n' : nearOuterBottom ? 'skew-s' : nearOuterLeft ? 'skew-w' : 'skew-e';
+                const edgePoint =
+                    edgeKind === 'skew-n' ? { x: handles.outer.x + handles.outer.w / 2, y: handles.outer.y } :
+                    edgeKind === 'skew-s' ? { x: handles.outer.x + handles.outer.w / 2, y: handles.outer.y + handles.outer.h } :
+                    edgeKind === 'skew-w' ? { x: handles.outer.x, y: handles.outer.y + handles.outer.h / 2 } :
+                    { x: handles.outer.x + handles.outer.w, y: handles.outer.y + handles.outer.h / 2 };
+                setActiveBoxHandle({ kind: edgeKind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: edgePoint });
+                setDragStart(pos);
+                const selectedIds = new Set(selection.map(s => s.strokeId));
+                setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
+                return true;
+            }
+
+            const edgeTolX = Math.max(3, Math.min(8, rawBounds.w * 0.22));
+            const edgeTolY = Math.max(3, Math.min(8, rawBounds.h * 0.22));
+            const nearInnerTop = Math.abs(pos.y - rawBounds.y) <= edgeTolY && pos.x >= rawBounds.x - edgeTolX && pos.x <= rawBounds.x + rawBounds.w + edgeTolX;
+            const nearInnerBottom = Math.abs(pos.y - (rawBounds.y + rawBounds.h)) <= edgeTolY && pos.x >= rawBounds.x - edgeTolX && pos.x <= rawBounds.x + rawBounds.w + edgeTolX;
+            const nearInnerLeft = Math.abs(pos.x - rawBounds.x) <= edgeTolX && pos.y >= rawBounds.y - edgeTolY && pos.y <= rawBounds.y + rawBounds.h + edgeTolY;
+            const nearInnerRight = Math.abs(pos.x - (rawBounds.x + rawBounds.w)) <= edgeTolX && pos.y >= rawBounds.y - edgeTolY && pos.y <= rawBounds.y + rawBounds.h + edgeTolY;
+
+            if (nearInnerTop || nearInnerBottom || nearInnerLeft || nearInnerRight) {
+                const edgeKind: BoxHandleKind = nearInnerTop ? 'scale-n' : nearInnerBottom ? 'scale-s' : nearInnerLeft ? 'scale-w' : 'scale-e';
+                const edgePoint =
+                    edgeKind === 'scale-n' ? { x: rawBounds.x + rawBounds.w / 2, y: rawBounds.y } :
+                    edgeKind === 'scale-s' ? { x: rawBounds.x + rawBounds.w / 2, y: rawBounds.y + rawBounds.h } :
+                    edgeKind === 'scale-w' ? { x: rawBounds.x, y: rawBounds.y + rawBounds.h / 2 } :
+                    { x: rawBounds.x + rawBounds.w, y: rawBounds.y + rawBounds.h / 2 };
+                setActiveBoxHandle({ kind: edgeKind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: edgePoint });
+                setDragStart(pos);
+                const selectedIds = new Set(selection.map(s => s.strokeId));
+                setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
+                return true;
+            }
+
+            const visualBounds = getBoundsFromSelection(selection, strokes, 10) || rawBounds;
+            const visualOuter = {
+                x: visualBounds.x - 26,
+                y: visualBounds.y - 26,
+                w: visualBounds.w + 52,
+                h: visualBounds.h + 52
+            };
+            const pointerInOuterBounds = pointInRect(pos, visualOuter);
+            const pointerInInnerBounds = pointInRect(pos, visualBounds);
+            if (pointerInOuterBounds && !pointerInInnerBounds) {
+                setActiveBoxHandle({
+                    kind: 'rotate-ring',
+                    bounds: rawBounds,
+                    outerBounds: handles.outer,
+                    handlePoint: { x: rawBounds.x + rawBounds.w / 2, y: rawBounds.y + rawBounds.h / 2 }
+                });
+                setDragStart(pos);
+                const selectedIds = new Set(selection.map(s => s.strokeId));
+                setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
+                return true;
+            }
+
+            if (pointerInInnerBounds) {
                 setDragStart(pos);
                 const selectedIds = new Set(selection.map(s => s.strokeId));
                 setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
                 updateCentroid(selection, strokes);
+                return true;
+            }
+
+            if (pointerInOuterBounds) {
+                return true;
+            }
+
+            const lockDismissBounds = expandRect(visualOuter, 42);
+            if (pointInRect(pos, lockDismissBounds)) {
+                return true;
+            }
+
+            if (!isShift) {
+                setSelection([]);
+                setCentroid(null);
+                setTransformCenter(null);
                 return true;
             }
         }
@@ -437,12 +544,18 @@ export const useTransformTool = (
                         const movingStartY = activeBoxHandle.handlePoint.y;
                         const anchor = isCtrl ? activeBoxHandle.handlePoint : { x: oppositeX, y: oppositeY };
 
-                        let sx = (effectivePos.x - anchor.x) / Math.max(0.001, movingStartX - anchor.x);
-                        let sy = (effectivePos.y - anchor.y) / Math.max(0.001, movingStartY - anchor.y);
+                        const dx0 = movingStartX - anchor.x;
+                        const dy0 = movingStartY - anchor.y;
+                        const denomX = Math.abs(dx0) < 8 ? (dx0 < 0 ? -8 : 8) : dx0;
+                        const denomY = Math.abs(dy0) < 8 ? (dy0 < 0 ? -8 : 8) : dy0;
+                        let sx = (effectivePos.x - anchor.x) / denomX;
+                        let sy = (effectivePos.y - anchor.y) / denomY;
                         if (handle === 'n' || handle === 's') sx = 1;
                         if (handle === 'e' || handle === 'w') sy = 1;
                         if (!Number.isFinite(sx)) sx = 1;
                         if (!Number.isFinite(sy)) sy = 1;
+                        sx = Math.max(-8, Math.min(8, sx));
+                        sy = Math.max(-8, Math.min(8, sy));
                         if (!isAlt && (handle.includes('n') || handle.includes('s')) && (handle.includes('e') || handle.includes('w'))) {
                             const uni = Math.abs(Math.abs(sx) > Math.abs(sy) ? sx : sy);
                             sx = Math.sign(sx || 1) * uni;
@@ -452,7 +565,7 @@ export const useTransformTool = (
                         newP = scalePoint(p, anchor, sx, sy);
                         if (p.cp1) newP.cp1 = scalePoint(p.cp1, anchor, sx, sy);
                         if (p.cp2) newP.cp2 = scalePoint(p.cp2, anchor, sx, sy);
-                    } else if (activeBoxHandle.kind.startsWith('rotate-')) {
+                    } else if (activeBoxHandle.kind === 'rotate-ring') {
                         const center = isCtrl ? activeBoxHandle.handlePoint : (transformCenter || { x: cx, y: cy });
                         const a0 = Math.atan2(startPoint.y - center.y, startPoint.x - center.x);
                         const a1 = Math.atan2(effectivePos.y - center.y, effectivePos.x - center.x);
@@ -465,9 +578,12 @@ export const useTransformTool = (
                         const local = { x: p.x - origin.x, y: p.y - origin.y };
                         let skewX = 0;
                         let skewY = 0;
-                        if (activeBoxHandle.kind === 'skew-n' || activeBoxHandle.kind === 'skew-s') {
+                        if (activeBoxHandle.kind === 'skew-n' || activeBoxHandle.kind === 'skew-s' || activeBoxHandle.kind === 'skew-nw' || activeBoxHandle.kind === 'skew-ne' || activeBoxHandle.kind === 'skew-sw' || activeBoxHandle.kind === 'skew-se') {
                             skewX = (effectivePos.x - startPoint.x) / safeH;
                         } else {
+                            skewY = (effectivePos.y - startPoint.y) / safeW;
+                        }
+                        if (activeBoxHandle.kind === 'skew-nw' || activeBoxHandle.kind === 'skew-ne' || activeBoxHandle.kind === 'skew-sw' || activeBoxHandle.kind === 'skew-se') {
                             skewY = (effectivePos.y - startPoint.y) / safeW;
                         }
                         newP.x = origin.x + local.x + local.y * skewX;
@@ -482,46 +598,9 @@ export const useTransformTool = (
                         }
                     }
                 } else {
-                    const totalPoints = selection.reduce((acc, s) => acc + s.pointIndices.size, 0);
-                    const effectiveMode = totalPoints < 2 ? TransformMode.TRANSLATE : mode;
-                    if (effectiveMode === TransformMode.TRANSLATE) {
-                        newP = { x: p.x + delta.x, y: p.y + delta.y };
-                        if (p.cp1) newP.cp1 = { x: p.cp1.x + delta.x, y: p.cp1.y + delta.y };
-                        if (p.cp2) newP.cp2 = { x: p.cp2.x + delta.x, y: p.cp2.y + delta.y };
-                    } else if (effectiveMode === TransformMode.ROTATE && centroid) {
-                        const a0 = Math.atan2(startPoint.y - centroid.y, startPoint.x - centroid.x);
-                        const a1 = Math.atan2(effectivePos.y - centroid.y, effectivePos.x - centroid.x);
-                        const angle = ((a1 - a0) * 180) / Math.PI;
-                        newP = rotatePoint(p, centroid, angle);
-                        if (p.cp1) newP.cp1 = rotatePoint(p.cp1, centroid, angle);
-                        if (p.cp2) newP.cp2 = rotatePoint(p.cp2, centroid, angle);
-                    } else if (effectiveMode === TransformMode.SCALE && transformCenter) {
-                        const sd = distance(startPoint, transformCenter);
-                        const cd = distance(effectivePos, transformCenter);
-                        if (sd > 0.001) {
-                            const s = cd / sd;
-                            newP = scalePoint(p, transformCenter, s);
-                            if (p.cp1) newP.cp1 = scalePoint(p.cp1, transformCenter, s);
-                            if (p.cp2) newP.cp2 = scalePoint(p.cp2, transformCenter, s);
-                        }
-                    } else if (effectiveMode === TransformMode.SKEW && transformCenter) {
-                        const skewX = (effectivePos.x - startPoint.x) * 0.002;
-                        const skewY = (effectivePos.y - startPoint.y) * 0.002;
-                        const rx = p.x - transformCenter.x;
-                        const ry = p.y - transformCenter.y;
-                        newP.x = transformCenter.x + rx + ry * skewX;
-                        newP.y = transformCenter.y + ry + rx * skewY;
-                        if (p.cp1) {
-                            const c1x = p.cp1.x - transformCenter.x;
-                            const c1y = p.cp1.y - transformCenter.y;
-                            newP.cp1 = { x: transformCenter.x + c1x + c1y * skewX, y: transformCenter.y + c1y + c1x * skewY };
-                        }
-                        if (p.cp2) {
-                            const c2x = p.cp2.x - transformCenter.x;
-                            const c2y = p.cp2.y - transformCenter.y;
-                            newP.cp2 = { x: transformCenter.x + c2x + c2y * skewX, y: transformCenter.y + c2y + c2x * skewY };
-                        }
-                    }
+                    newP = { x: p.x + delta.x, y: p.y + delta.y };
+                    if (p.cp1) newP.cp1 = { x: p.cp1.x + delta.x, y: p.cp1.y + delta.y };
+                    if (p.cp2) newP.cp2 = { x: p.cp2.x + delta.x, y: p.cp2.y + delta.y };
                 }
 
                 return newP;
