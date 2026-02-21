@@ -8,24 +8,32 @@ interface SkeletonOverlayProps {
   activeTool: RigTool;
   viewport: { x: number; y: number; zoom: number };
   onBonePointerDown: (e: React.PointerEvent, boneId: string, part: 'head' | 'tail' | 'body') => void;
+  /** Called on pointer-up — used to commit animate-tool keyframes */
+  onBonePointerUp?: (e: React.PointerEvent, boneId: string) => void;
   // Box-select rect in canvas coords (null when not dragging)
   boxSelectRect: { x: number; y: number; w: number; h: number } | null;
 }
 
 const SELECTED_COLOR = '#facc15';
+const ANIMATE_TOOLS: RigTool[] = ['BONE_MOVE', 'BONE_ROTATE', 'BONE_SCALE'];
 
 function BoneShape({
   bone,
   isSelected,
   activeTool,
   onPointerDown,
+  onPointerUp,
 }: {
   bone: Bone;
   isSelected: boolean;
   activeTool: RigTool;
   onPointerDown: (e: React.PointerEvent, boneId: string, part: 'head' | 'tail' | 'body') => void;
+  onPointerUp?: (e: React.PointerEvent, boneId: string) => void;
 }) {
-  const color = isSelected ? SELECTED_COLOR : (bone.color || '#f59e0b');
+  const isAnimateTool = ANIMATE_TOOLS.includes(activeTool);
+  const color = isSelected
+    ? (isAnimateTool ? '#34d399' : SELECTED_COLOR)
+    : (bone.color || '#f59e0b');
   const dx = bone.tailX - bone.headX;
   const dy = bone.tailY - bone.headY;
   const len = Math.sqrt(dx * dx + dy * dy);
@@ -35,7 +43,6 @@ function BoneShape({
   const ny = dx / len;
   const width = Math.max(4, Math.min(14, len * 0.18));
 
-  // Moho-style diamond: head → wide point (25% along) → tail
   const midX = bone.headX + dx * 0.25;
   const midY = bone.headY + dy * 0.25;
   const p1x = midX + nx * width;
@@ -47,7 +54,13 @@ function BoneShape({
   const isSelectTool = activeTool === 'BONE_SELECT';
   const isMoveTool = activeTool === 'BONE_MOVE';
   const isRotateTool = activeTool === 'BONE_ROTATE';
-  const interactable = isSelectTool || isMoveTool || isRotateTool || activeTool === 'BONE_PARENT';
+  const isScaleTool = activeTool === 'BONE_SCALE';
+  const isDeleteTool = activeTool === 'BONE_DELETE';
+  const interactable = isSelectTool || isMoveTool || isRotateTool || isScaleTool || isDeleteTool || activeTool === 'BONE_PARENT';
+
+  const handlePointerUp = onPointerUp
+    ? (e: React.PointerEvent) => { e.stopPropagation(); onPointerUp(e, bone.id); }
+    : undefined;
 
   return (
     <g style={{ pointerEvents: interactable ? 'auto' : 'none' }}>
@@ -59,6 +72,7 @@ function BoneShape({
         strokeWidth={Math.max(8, width * 2)}
         style={{ cursor: interactable ? 'pointer' : 'default' }}
         onPointerDown={e => onPointerDown(e, bone.id, 'body')}
+        onPointerUp={handlePointerUp}
       />
 
       {/* Visible bone body */}
@@ -66,21 +80,34 @@ function BoneShape({
         d={dPath}
         fill={color}
         fillOpacity={isSelected ? 0.95 : 0.8}
-        stroke={isSelected ? '#fff' : '#92400e'}
-        strokeWidth={isSelected ? 1.5 : 0.8}
+        stroke={isSelected ? (isAnimateTool ? '#6ee7b7' : '#fff') : '#92400e'}
+        strokeWidth={isSelected ? (isAnimateTool ? 2 : 1.5) : 0.8}
         style={{ pointerEvents: 'none' }}
       />
+
+      {/* Green glow ring when posing in animate mode */}
+      {isAnimateTool && isSelected && (
+        <path
+          d={dPath}
+          fill="none"
+          stroke="#34d399"
+          strokeWidth={4}
+          strokeOpacity={0.25}
+          style={{ pointerEvents: 'none' }}
+        />
+      )}
 
       {/* Head joint */}
       <circle
         cx={bone.headX}
         cy={bone.headY}
         r={isSelected ? 7 : 5}
-        fill={isSelected ? '#fff' : '#fde68a'}
+        fill={isSelected ? (isAnimateTool ? '#6ee7b7' : '#fff') : '#fde68a'}
         stroke={color}
         strokeWidth={1.5}
         style={{ cursor: isSelectTool || isMoveTool ? 'grab' : 'default', pointerEvents: interactable ? 'auto' : 'none' }}
         onPointerDown={e => { e.stopPropagation(); onPointerDown(e, bone.id, 'head'); }}
+        onPointerUp={handlePointerUp}
       />
 
       {/* Tail joint */}
@@ -96,6 +123,7 @@ function BoneShape({
           pointerEvents: interactable ? 'auto' : 'none',
         }}
         onPointerDown={e => { e.stopPropagation(); onPointerDown(e, bone.id, 'tail'); }}
+        onPointerUp={handlePointerUp}
       />
 
       {/* Bone name */}
@@ -119,10 +147,10 @@ export const SkeletonOverlay: React.FC<SkeletonOverlayProps> = ({
   selectedBoneIds,
   activeTool,
   onBonePointerDown,
+  onBonePointerUp,
   boxSelectRect,
 }) => {
   return (
-    // Must be pointer-events-auto so bone clicks register (the SVG root is pointer-events-none)
     <g className="skeleton-overlay" style={{ pointerEvents: 'none' }}>
       {skeletons.map(skeleton => {
         const isActive = skeleton.id === activeSkeletonId;
@@ -155,6 +183,7 @@ export const SkeletonOverlay: React.FC<SkeletonOverlayProps> = ({
                 isSelected={isActive && selectedBoneIds.has(bone.id)}
                 activeTool={activeTool}
                 onPointerDown={onBonePointerDown}
+                onPointerUp={onBonePointerUp}
               />
             ))}
           </g>

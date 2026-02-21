@@ -1,52 +1,82 @@
-// Moho Pro 14 style rigging system types
+// Rigging system types
 
 export interface Bone {
   id: string;
   name: string;
   parentBoneId: string | null;
-  // In canvas space
+  // Live pose (world space)
   headX: number;
   headY: number;
   tailX: number;
   tailY: number;
-  // Transform state
-  angle: number;       // radians, local
+  angle: number;   // world-space radians
   length: number;
-  restAngle: number;   // rest pose angle
+  // Rest pose baseline
+  restAngle: number;
   restHeadX: number;
   restHeadY: number;
   restTailX: number;
   restTailY: number;
-  // Moho-style properties
+  restLength: number;
+  // Properties
   color: string;
-  strength: number;   // 0-1 influence radius
+  strength: number;
+  flexiBindRadius: number;
   zOrder: number;
   isSelected: boolean;
 }
 
 export interface Skeleton {
   id: string;
-  layerId: string; // which layer owns this skeleton
+  layerId: string;
   name: string;
   bones: Bone[];
 }
 
-// Bind Points: vector control points bound to specific bones
 export interface BoundPoint {
   strokeId: string;
   pointIndex: number;
   boneId: string;
-  weight: number; // 0-1
+  weight: number;
 }
 
-// Bind Layer: entire layer transforms with bone
 export interface BoundLayer {
   layerId: string;
   boneId: string;
   skeletonId: string;
 }
 
-// Bone keyframe for animation
+// ── Per-channel keyframe system ───────────────────────────────────────────────
+// Each channel (translate, rotate, scale) is keyed independently.
+// A BoneKeyframe is ONE master record per skeleton per frame — it stores
+// whichever channels were active when the key was set.
+// Channels not stored in a keyframe are interpolated from surrounding keys
+// for that specific channel.
+
+export type BoneKeyChannel = 'translate' | 'rotate' | 'scale';
+
+export interface BoneChannelData {
+  // Translate
+  headX?: number;
+  headY?: number;
+  // Rotate
+  angle?: number;
+  // Scale
+  length?: number;
+}
+
+// One keyframe record = one bone's channel data at one frame
+export interface BoneChannelKeyframe {
+  id: string;
+  frameIndex: number;
+  skeletonId: string;
+  boneId: string;
+  channel: BoneKeyChannel;
+  data: BoneChannelData;
+}
+
+// Legacy combined keyframe kept for backward compat (used when keyAllChannels=true)
+// Internally we now store BoneChannelKeyframe[]; the combined type is assembled on read.
 export interface BoneKeyframe {
   id: string;
   frameIndex: number;
@@ -56,8 +86,24 @@ export interface BoneKeyframe {
       angle: number;
       headX: number;
       headY: number;
+      length: number;
+      // Which channels were explicitly keyed at this frame
+      keyedChannels?: BoneKeyChannel[];
     };
   };
 }
 
-export type RigTool = 'BONE_CREATE' | 'BONE_SELECT' | 'BONE_MOVE' | 'BONE_ROTATE' | 'BONE_PARENT' | 'BIND_POINTS' | 'BIND_LAYER';
+export type RigMode = 'EDIT' | 'ANIMATE';
+export type InheritMode = 'INHERIT' | 'IGNORE_PARENT';
+
+export type RigTool =
+  | 'BONE_CREATE'
+  | 'BONE_SELECT'
+  | 'BONE_MOVE'
+  | 'BONE_ROTATE'
+  | 'BONE_SCALE'
+  | 'BONE_DELETE'
+  | 'BONE_PARENT'
+  | 'BIND_POINTS'
+  | 'BIND_LAYER'
+  | 'FLEXI_BIND';
