@@ -31,7 +31,7 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
     onSetTransformPointsCurve
 }) => {
     
-    const isDrawTool = [ToolType.PEN, ToolType.POLYLINE, ToolType.CURVE, ToolType.RECTANGLE, ToolType.CIRCLE, ToolType.TRIANGLE, ToolType.STAR].includes(currentTool);
+    const isDrawTool = [ToolType.PEN, ToolType.POLYLINE, ToolType.CURVE, ToolType.ADD_POINTS, ToolType.RECTANGLE, ToolType.CIRCLE, ToolType.TRIANGLE, ToolType.STAR].includes(currentTool);
     const isTransformTool = currentTool === ToolType.TRANSFORM;
     const isPaintTool = currentTool === ToolType.PAINT_BUCKET;
     const hasSelection = selectedStrokeIds.size > 0;
@@ -85,13 +85,11 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
     const toggleBezier = () => setOptions({ ...options, showBezierHandles: !options.showBezierHandles });
     const toggleAutoMerge = () => setOptions({ ...options, autoMerge: !options.autoMerge });
     const toggleOptimize = () => setOptions({ ...options, optimizeFreehand: !options.optimizeFreehand });
-    const toggleAutoClose = () => setOptions({ ...options, autoClose: !options.autoClose });
     const setGapClosing = (dist: number) => setOptions({ ...options, gapClosingDistance: dist });
     const setFillColor = (color: string) => setOptions({ ...options, defaultFillColor: color });
     const toggleDrawStroke = () => setOptions({ ...options, drawStroke: !options.drawStroke });
     const toggleDrawFill = () => setOptions({ ...options, drawFill: !options.drawFill });
     const toggleBezierAdaptive = () => setOptions({ ...options, bezierAdaptive: !options.bezierAdaptive });
-    const toggleCloseCreatesFill = () => setOptions({ ...options, closeCreatesFill: !options.closeCreatesFill });
     const toggleTransformEditAllLayers = () => setOptions({ ...options, transformEditAllLayers: !options.transformEditAllLayers });
     const toggleBindLinkedFillsOnTransform = () => setOptions({ ...options, bindLinkedFillsOnTransform: !options.bindLinkedFillsOnTransform });
 
@@ -319,17 +317,6 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                 {isTransformTool && (
                     <>
                         <button 
-                            onClick={toggleAutoClose}
-                            className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
-                                options.autoClose 
-                                ? 'bg-green-900/30 border-green-500 text-green-200' 
-                                : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
-                            }`}
-                        >
-                            <Magnet size={14} />
-                            <span>Cling / Close</span>
-                        </button>
-                        <button 
                             onClick={toggleAutoMerge}
                             className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
                                 options.autoMerge 
@@ -339,19 +326,6 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                         >
                             <Merge size={14} />
                             <span>Auto-Merge</span>
-                        </button>
-
-                        <button 
-                            onClick={toggleCloseCreatesFill}
-                            className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
-                                options.closeCreatesFill 
-                                ? 'bg-emerald-900/30 border-emerald-500 text-emerald-200' 
-                                : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
-                            }`}
-                            title="When transform-closing, create or preserve fill"
-                        >
-                            <PaintBucket size={14} />
-                            <span>Create Fill on Close</span>
                         </button>
                         <button 
                             onClick={toggleBezierAdaptive}
@@ -501,23 +475,10 @@ export const ToolPropertiesPanel: React.FC<ToolPropertiesPanelProps> = React.mem
                                 ? 'bg-purple-900/30 border-purple-500 text-purple-200' 
                                 : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
                             }`}
-                            title="Preserve smooth bezier curvature when snapping/closing/merging"
+                            title="Preserve smooth bezier curvature when snapping/merging"
                         >
                             <Spline size={14} />
                             <span>Bezier Adapt</span>
-                        </button>
-
-                        <button 
-                            onClick={toggleAutoClose}
-                            className={`flex items-center gap-2 text-xs p-2 rounded transition-colors border ${
-                                options.autoClose 
-                                ? 'bg-green-900/30 border-green-500 text-green-200' 
-                                : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
-                            }`}
-                            title="Automatically close the shape if ending near the start"
-                        >
-                            <Magnet size={14} />
-                            <span>Cling / Close</span>
                         </button>
 
                         <button 

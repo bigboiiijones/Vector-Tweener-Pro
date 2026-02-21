@@ -644,7 +644,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
             taperStart: options.defaultTaperStart,
             taperEnd: options.defaultTaperEnd,
             isClosed: isClosed || [ToolType.RECTANGLE, ToolType.CIRCLE, ToolType.TRIANGLE, ToolType.STAR].includes(tool),
-            fillColor: (options.drawFill || (isClosed && options.closeCreatesFill))
+            fillColor: options.drawFill
                 ? options.defaultFillColor
                 : undefined
         };
@@ -665,54 +665,99 @@ export const useKeyframeSystem = (totalFrames: number) => {
                 
                 // ... (Auto Merge logic similar to before, but scoped to this keyframe)
                  if (!isMotionPath && options?.autoMerge) {
-                    const MERGE_THRESHOLD = 10; 
-                    const newStart = processedPoints[0];
-                    const newEnd = processedPoints[processedPoints.length - 1];
-                    let targetStroke: Stroke | null = null;
-                    let mergeType: 'APPEND_TO_END' | 'PREPEND_TO_START' | null = null;
+                    const MERGE_THRESHOLD = 10;
+                    const DUPLICATE_EPSILON = 0.001;
+                    const reversePoints = (pts: Point[]) => [...pts].reverse().map(p => ({
+                        ...p,
+                        cp1: p.cp2 ? { ...p.cp2 } : undefined,
+                        cp2: p.cp1 ? { ...p.cp1 } : undefined
+                    }));
 
-                    for (const s of updatedStrokes) {
-                        const sStart = s.points[0];
-                        const sEnd = s.points[s.points.length - 1];
-                        if (distance(sEnd, newStart) < MERGE_THRESHOLD) {
-                            targetStroke = s;
-                            mergeType = 'APPEND_TO_END';
-                            break;
-                        } else if (distance(sStart, newEnd) < MERGE_THRESHOLD) {
-                            targetStroke = s;
-                            mergeType = 'PREPEND_TO_START';
+                    const mergePoints = (base: Point[], other: Point[]) => {
+                        if (base.length < 2 || other.length < 2) return null;
+
+                        const baseStart = base[0];
+                        const baseEnd = base[base.length - 1];
+                        const otherStart = other[0];
+                        const otherEnd = other[other.length - 1];
+
+                        const candidates: Array<{ score: number; points: Point[]; closed: boolean }> = [];
+
+                        const append = (a: Point[], b: Point[], joinIdx: number, score: number) => {
+                            const points = [...a, ...b.slice(1)];
+                            const incomingJoin = a[a.length - 1];
+                            const outgoingJoin = b[0];
+                            points[joinIdx] = {
+                                ...points[joinIdx],
+                                cp1: points[joinIdx].cp1 || incomingJoin.cp1,
+                                cp2: outgoingJoin.cp2 || points[joinIdx].cp2
+                            };
+                            if (options.bezierAdaptive) {
+                                adaptJointToBezier(points, joinIdx);
+                            }
+                            const closed = distance(points[0], points[points.length - 1]) < MERGE_THRESHOLD;
+                            candidates.push({ score, points, closed });
+                        };
+
+                        const dEndStart = distance(baseEnd, otherStart);
+                        if (dEndStart < MERGE_THRESHOLD) append(base, other, Math.max(1, base.length - 1), dEndStart);
+
+                        const revOther = reversePoints(other);
+                        const dEndEnd = distance(baseEnd, otherEnd);
+                        if (dEndEnd < MERGE_THRESHOLD) append(base, revOther, Math.max(1, base.length - 1), dEndEnd);
+
+                        const dStartEnd = distance(baseStart, otherEnd);
+                        if (dStartEnd < MERGE_THRESHOLD) append(other, base, Math.max(1, other.length - 1), dStartEnd);
+
+                        const dStartStart = distance(baseStart, otherStart);
+                        const revOtherForStart = reversePoints(other);
+                        if (dStartStart < MERGE_THRESHOLD) append(revOtherForStart, base, Math.max(1, revOtherForStart.length - 1), dStartStart);
+
+                        if (candidates.length === 0) return null;
+                        candidates.sort((a, b) => {
+                            if (a.closed !== b.closed) return a.closed ? -1 : 1;
+                            return a.score - b.score;
+                        });
+
+                        let mergedPoints = candidates[0].points;
+                        let closed = candidates[0].closed;
+                        if (closed && distance(mergedPoints[0], mergedPoints[mergedPoints.length - 1]) <= DUPLICATE_EPSILON) {
+                            mergedPoints = mergedPoints.slice(0, -1);
+                        }
+                        if (closed && options.bezierAdaptive && mergedPoints.length > 3) {
+                            const closedPoints = [...mergedPoints, mergedPoints[0]];
+                            mergedPoints = adaptJointToBezier(closedPoints, closedPoints.length - 2).slice(0, -1);
+                        }
+
+                        return { points: mergedPoints, closed };
+                    };
+
+                    let workingStroke: Stroke = { ...newStroke };
+                    const consumedIds = new Set<string>();
+                    let merged = true;
+                    while (merged) {
+                        merged = false;
+                        for (const candidate of updatedStrokes) {
+                            if (consumedIds.has(candidate.id)) continue;
+                            const mergedResult = mergePoints(workingStroke.points, candidate.points);
+                            if (!mergedResult) continue;
+
+                            workingStroke = {
+                                ...candidate,
+                                points: mergedResult.points,
+                                isSelected: true,
+                                isClosed: !!candidate.isClosed || !!workingStroke.isClosed || mergedResult.closed
+                            };
+                            consumedIds.add(candidate.id);
+                            merged = true;
                             break;
                         }
                     }
 
-                    if (targetStroke && mergeType) {
-                        let mergedPoints: Point[] = [];
-                        if (mergeType === 'APPEND_TO_END') {
-                            mergedPoints = [...targetStroke.points, ...processedPoints.slice(1)];
-                            const joinIndex = Math.max(1, targetStroke.points.length - 1);
-                            const incomingJoin = targetStroke.points[targetStroke.points.length - 1];
-                            const outgoingJoin = processedPoints[0];
-                            mergedPoints[joinIndex] = {
-                                ...mergedPoints[joinIndex],
-                                cp1: mergedPoints[joinIndex].cp1 || incomingJoin.cp1,
-                                cp2: outgoingJoin.cp2 || mergedPoints[joinIndex].cp2
-                            };
-                            if (options.bezierAdaptive) mergedPoints = adaptJointToBezier(mergedPoints, joinIndex);
-                        } else {
-                            mergedPoints = [...processedPoints, ...targetStroke.points.slice(1)];
-                            const joinIndex = Math.max(1, processedPoints.length - 1);
-                            const incomingJoin = processedPoints[processedPoints.length - 1];
-                            const outgoingJoin = targetStroke.points[0];
-                            mergedPoints[joinIndex] = {
-                                ...mergedPoints[joinIndex],
-                                cp1: incomingJoin.cp1 || mergedPoints[joinIndex].cp1,
-                                cp2: outgoingJoin.cp2 || mergedPoints[joinIndex].cp2
-                            };
-                            if (options.bezierAdaptive) mergedPoints = adaptJointToBezier(mergedPoints, joinIndex);
-                        }
-                        const mergedStroke = { ...targetStroke, points: mergedPoints, isSelected: true };
-                        mergedStrokeId = mergedStroke.id;
-                        updatedStrokes = updatedStrokes.map(s => s.id === targetStroke!.id ? mergedStroke : s);
+                    if (consumedIds.size > 0) {
+                        mergedStrokeId = workingStroke.id;
+                        updatedStrokes = updatedStrokes.filter(s => !consumedIds.has(s.id));
+                        updatedStrokes.push(workingStroke);
                     } else {
                         updatedStrokes.push(newStroke);
                     }
