@@ -11,11 +11,16 @@ import { postProcessTransformedStrokes } from '../logic/transformPostprocess';
 
 
 
-const ADD_POINT_HANDLE_FACTOR = 0.46;
-const MIN_ADD_POINT_HANDLE = 8;
+const ADD_POINT_HANDLE_FACTOR = 0.34;
 const MAX_ADD_POINT_HANDLE = 120;
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+
+const normalize = (x: number, y: number): { x: number; y: number } => {
+    const len = Math.hypot(x, y);
+    if (len < 0.001) return { x: 0, y: 0 };
+    return { x: x / len, y: y / len };
+};
 
 const withAutoBezierForAddPoints = (
     points: Point[],
@@ -28,59 +33,65 @@ const withAutoBezierForAddPoints = (
     const hasDuplicatedClosure = isClosed && distance(points[0], points[points.length - 1]) < 2;
     const core = hasDuplicatedClosure ? points.slice(0, -1) : points;
     const shaped = core.map(p => ({ x: p.x, y: p.y }));
+    const n = shaped.length;
 
-    const getCoreIndex = (idx: number): number => {
-        if (isClosed) {
-            const n = shaped.length;
-            return ((idx % n) + n) % n;
-        }
-        return idx;
+    const idx = (i: number): number => {
+        if (!isClosed) return i;
+        return ((i % n) + n) % n;
     };
 
-    for (let i = 0; i < shaped.length; i++) {
+    const getTangent = (i: number): { x: number; y: number } => {
+        if (isClosed) {
+            const prev = shaped[idx(i - 1)];
+            const next = shaped[idx(i + 1)];
+            return normalize(next.x - prev.x, next.y - prev.y);
+        }
+
+        if (i <= 0) {
+            if (n >= 3) {
+                const p0 = shaped[0];
+                const p1 = shaped[1];
+                const p2 = shaped[2];
+                return normalize((2 * (p1.x - p0.x)) - (p2.x - p1.x), (2 * (p1.y - p0.y)) - (p2.y - p1.y));
+            }
+            return normalize(shaped[1].x - shaped[0].x, shaped[1].y - shaped[0].y);
+        }
+
+        if (i >= n - 1) {
+            if (n >= 3) {
+                const p0 = shaped[n - 3];
+                const p1 = shaped[n - 2];
+                const p2 = shaped[n - 1];
+                return normalize((2 * (p2.x - p1.x)) - (p1.x - p0.x), (2 * (p2.y - p1.y)) - (p1.y - p0.y));
+            }
+            return normalize(shaped[n - 1].x - shaped[n - 2].x, shaped[n - 1].y - shaped[n - 2].y);
+        }
+
+        const prev = shaped[i - 1];
+        const next = shaped[i + 1];
+        return normalize(next.x - prev.x, next.y - prev.y);
+    };
+
+    for (let i = 0; i < n; i++) {
         if (sharpPointIndices.has(i)) continue;
 
         const point = shaped[i];
+        const tangent = getTangent(i);
+        if (Math.hypot(tangent.x, tangent.y) < 0.001) continue;
+
         const hasPrev = isClosed || i > 0;
-        const hasNext = isClosed || i < shaped.length - 1;
-        const prev = hasPrev ? shaped[getCoreIndex(i - 1)] : undefined;
-        const next = hasNext ? shaped[getCoreIndex(i + 1)] : undefined;
+        const hasNext = isClosed || i < n - 1;
+        const prev = hasPrev ? shaped[idx(i - 1)] : undefined;
+        const next = hasNext ? shaped[idx(i + 1)] : undefined;
 
-        if (!prev && !next) continue;
-
-        if (prev && next) {
-            const vx = next.x - prev.x;
-            const vy = next.y - prev.y;
-            const vLen = Math.hypot(vx, vy);
-            if (vLen > 0.001) {
-                const nx = vx / vLen;
-                const ny = vy / vLen;
-                const inLen = clamp(distance(point, prev) * ADD_POINT_HANDLE_FACTOR, MIN_ADD_POINT_HANDLE, MAX_ADD_POINT_HANDLE);
-                const outLen = clamp(distance(point, next) * ADD_POINT_HANDLE_FACTOR, MIN_ADD_POINT_HANDLE, MAX_ADD_POINT_HANDLE);
-                point.cp1 = { x: point.x - nx * inLen, y: point.y - ny * inLen };
-                point.cp2 = { x: point.x + nx * outLen, y: point.y + ny * outLen };
-                continue;
-            }
+        if (prev) {
+            const inLen = clamp(distance(point, prev) * ADD_POINT_HANDLE_FACTOR, 0, MAX_ADD_POINT_HANDLE);
+            point.cp1 = { x: point.x - tangent.x * inLen, y: point.y - tangent.y * inLen };
         }
 
         if (next) {
-            const dirX = next.x - point.x;
-            const dirY = next.y - point.y;
-            const segLen = Math.hypot(dirX, dirY);
-            if (segLen > 0.001) {
-                const outLen = clamp(segLen * ADD_POINT_HANDLE_FACTOR, MIN_ADD_POINT_HANDLE, MAX_ADD_POINT_HANDLE);
-                point.cp2 = { x: point.x + (dirX / segLen) * outLen, y: point.y + (dirY / segLen) * outLen };
-            }
-        }
-
-        if (prev) {
-            const dirX = point.x - prev.x;
-            const dirY = point.y - prev.y;
-            const segLen = Math.hypot(dirX, dirY);
-            if (segLen > 0.001) {
-                const inLen = clamp(segLen * ADD_POINT_HANDLE_FACTOR, MIN_ADD_POINT_HANDLE, MAX_ADD_POINT_HANDLE);
-                point.cp1 = { x: point.x - (dirX / segLen) * inLen, y: point.y - (dirY / segLen) * inLen };
-            }
+            const outLen = clamp(distance(point, next) * ADD_POINT_HANDLE_FACTOR, 0, MAX_ADD_POINT_HANDLE);
+            point.cp2 = { x: point.x + tangent.x * outLen, y: point.y + tangent.y * outLen };
         }
     }
 
