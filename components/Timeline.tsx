@@ -1,5 +1,6 @@
 
 import React, { useMemo, useState, useRef, useEffect } from 'react';
+import { useContextMenu } from '../hooks/useContextMenu';
 import { Keyframe, ProjectSettings, CameraKeyframe, Layer } from '../types';
 import { TimelineSettings } from './TimelineSettings';
 import { Trash2, Video, Folder, FolderOpen, Image as ImageIcon, Link2, Unlink, Plus } from 'lucide-react';
@@ -35,6 +36,12 @@ interface TimelineProps {
   toggleSync: (layerId: string) => void;
   selectLayer: (id: string, ctrl: boolean, shift: boolean) => void;
   toggleExpand: (id: string) => void;
+  onSetSwitchSelection: (switchLayerId: string, childLayerId: string, frameIndex: number) => void;
+}
+
+interface SwitchCellMenuPayload {
+  switchLayerId: string;
+  frameIndex: number;
 }
 
 export const Timeline: React.FC<TimelineProps> = React.memo(({
@@ -62,7 +69,8 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
   setProjectSettings,
   toggleSync,
   selectLayer,
-  toggleExpand
+  toggleExpand,
+  onSetSwitchSelection
 }) => {
   // Selection
   const [selectedKeyframeIds, setSelectedKeyframeIds] = useState<Set<string>>(new Set());
@@ -71,6 +79,26 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
   const [lastCameraClickedIndex, setLastCameraClickedIndex] = useState<number | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const { menu: switchMenu, openMenu: openSwitchMenu, closeMenu: closeSwitchMenu } = useContextMenu<SwitchCellMenuPayload>();
+
+  const getSwitchCandidates = (switchLayerId: string): Layer[] => {
+      return layers.filter(layer => layer.parentId === switchLayerId && (layer.type === 'VECTOR' || layer.type === 'GROUP'));
+  };
+
+  const getFirstVectorDescendant = (layerId: string): string | null => {
+      const queue = [layerId];
+      while (queue.length > 0) {
+          const currentId = queue.shift()!;
+          const children = layers.filter(layer => layer.parentId === currentId);
+          for (const child of children) {
+              if (child.type === 'VECTOR') return child.id;
+              if (child.type === 'GROUP' || child.type === 'SWITCH') queue.push(child.id);
+          }
+      }
+      return null;
+  };
+
 
   // Data prep
   const keyframesByLayer = useMemo(() => {
@@ -88,7 +116,7 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
           const l = layerList[i];
           if (!l.parentId) {
               result.push({ ...l, depth });
-              if (l.type === 'GROUP' && l.isExpanded) {
+              if ((l.type === 'GROUP' || l.type === 'SWITCH') && l.isExpanded) {
                   result = [...result, ...getChildren(layerList, l.id, depth + 1)];
               }
           }
@@ -102,7 +130,7 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
       for (let i = children.length - 1; i >= 0; i--) {
           const l = children[i];
           result.push({ ...l, depth });
-          if (l.type === 'GROUP' && l.isExpanded) {
+          if ((l.type === 'GROUP' || l.type === 'SWITCH') && l.isExpanded) {
               result = [...result, ...getChildren(allLayers, l.id, depth + 1)];
           }
       }
@@ -314,7 +342,7 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
   return (
     <div 
         className="absolute bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-700 h-80 flex flex-col z-50 outline-none focus-within:ring-1 focus-within:ring-blue-500 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.3)]"
-        onMouseDown={() => setActivePanel('TIMELINE')}
+        onMouseDown={() => { setActivePanel('TIMELINE'); closeSwitchMenu(); }}
         ref={containerRef}
         tabIndex={0} 
         onKeyDown={(e) => {
@@ -483,6 +511,11 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
                                             key={i}
                                             draggable={i !== 0}
                                             onClick={(e) => kf ? handleKeyframeClick(e, kf, layer) : handleEmptyClick(i)}
+                                            onContextMenu={(e) => {
+                                                if (layer.type === 'SWITCH') {
+                                                    openSwitchMenu(e, { switchLayerId: layer.id, frameIndex: i });
+                                                }
+                                            }}
                                             onDragStart={(e) => handleDragStart(e, i, kf?.id, false)}
                                             onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
                                             onDrop={(e) => handleDrop(e, i)}
@@ -510,6 +543,32 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
                 })}
             </div>
         </div>
+
+        {switchMenu && (
+            <div
+                className="fixed z-[130] min-w-[180px] bg-gray-800 border border-gray-600 rounded shadow-xl py-1"
+                style={{ left: `${switchMenu.position.x}px`, top: `${switchMenu.position.y}px` }}
+                onClick={(e) => e.stopPropagation()}
+            >
+                {getSwitchCandidates(switchMenu.payload.switchLayerId).map(candidate => (
+                    <button
+                        key={candidate.id}
+                        className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-blue-600"
+                        onClick={() => {
+                            onSetSwitchSelection(switchMenu.payload.switchLayerId, candidate.id, switchMenu.payload.frameIndex);
+                            const layerToActivate = candidate.type === 'VECTOR' ? candidate.id : getFirstVectorDescendant(candidate.id);
+                            if (layerToActivate) {
+                                selectLayer(layerToActivate, false, false);
+                            }
+                            closeSwitchMenu();
+                        }}
+                    >
+                        {candidate.name}
+                    </button>
+                ))}
+            </div>
+        )}
+
     </div>
   );
 });

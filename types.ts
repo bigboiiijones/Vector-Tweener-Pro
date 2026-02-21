@@ -33,6 +33,7 @@ export interface Keyframe {
   type: KeyframeType;
   strokes: Stroke[];
   motionPaths?: Stroke[]; 
+  switchChildId?: string;
   easing?: EasingType; 
   generatedStrategy?: AutoMatchStrategy; 
 }
@@ -135,7 +136,7 @@ export interface ToolOptions {
 }
 
 // --- Layer System Types ---
-export type LayerType = 'VECTOR' | 'GROUP';
+export type LayerType = 'VECTOR' | 'GROUP' | 'SWITCH';
 
 export interface Layer {
     id: string;

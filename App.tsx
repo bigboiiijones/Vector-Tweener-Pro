@@ -104,8 +104,25 @@ const App: React.FC = () => {
       keyframeSystem.ensureInitialKeyframes(layerSystem.layers);
   }, [layerSystem.layers, keyframeSystem.ensureInitialKeyframes]);
   
+
+  useEffect(() => {
+      const target = layerSystem.getSwitchActivationTarget(layerSystem.activeLayerId);
+      if (!target) return;
+
+      const currentSelection = keyframeSystem.getSwitchSelectionAtFrame(target.switchLayerId, currentFrameIndex);
+      if (currentSelection === target.childId) return;
+
+      keyframeSystem.setSwitchSelection(target.switchLayerId, target.childId, currentFrameIndex);
+  }, [
+      currentFrameIndex,
+      layerSystem.activeLayerId,
+      layerSystem.getSwitchActivationTarget,
+      keyframeSystem.getSwitchSelectionAtFrame,
+      keyframeSystem.setSwitchSelection
+  ]);
+
   // Get content for the composite view (all layers)
-  const displayedStrokes = keyframeSystem.getFrameContent(currentFrameIndex, toolOptions.autoMatchStrategy, layerSystem.layers);
+  const displayedStrokes = keyframeSystem.getFrameContent(currentFrameIndex, toolOptions.autoMatchStrategy, layerSystem.layers, layerSystem.activeLayerId);
   
   // Get active context (for onionskins and tools working on active layer)
   const { prev: prevContext, next: nextContext } = keyframeSystem.getTweenContext(currentFrameIndex, layerSystem.activeLayerId);
@@ -251,7 +268,7 @@ const App: React.FC = () => {
   const togglePlay = useCallback(() => setIsPlaying(p => !p), []);
   const deleteSelected = useCallback(() => keyframeSystem.deleteSelected(currentFrameIndex, selection.selectedStrokeIds, layerSystem.activeLayerId), [currentFrameIndex, selection.selectedStrokeIds, keyframeSystem, layerSystem.activeLayerId]);
   const reverseSelected = useCallback(() => keyframeSystem.reverseSelected(currentFrameIndex, selection.selectedStrokeIds, layerSystem.activeLayerId), [currentFrameIndex, selection.selectedStrokeIds, keyframeSystem, layerSystem.activeLayerId]);
-  const addKeyframe = useCallback(() => keyframeSystem.addKeyframe(currentFrameIndex, layerSystem.activeLayerId, layerSystem.layers), [currentFrameIndex, keyframeSystem, layerSystem.activeLayerId, layerSystem.layers]);
+  const addKeyframe = useCallback((layerId?: string) => keyframeSystem.addKeyframe(currentFrameIndex, layerId || layerSystem.activeLayerId, layerSystem.layers), [currentFrameIndex, keyframeSystem, layerSystem.activeLayerId, layerSystem.layers]);
   const addCameraKeyframe = useCallback(() => keyframeSystem.addCameraKeyframe(currentFrameIndex, activeCameraTransform), [currentFrameIndex, keyframeSystem, activeCameraTransform]);
 
   const addHoldFrame = useCallback(() => keyframeSystem.addHoldFrame(currentFrameIndex, layerSystem.activeLayerId, layerSystem.layers), [currentFrameIndex, keyframeSystem, layerSystem.activeLayerId, layerSystem.layers]);
@@ -423,7 +440,9 @@ const App: React.FC = () => {
                 onToggleExpand={layerSystem.toggleExpand}
                 onAddLayer={() => layerSystem.addLayer('VECTOR')}
                 onAddGroup={() => layerSystem.addLayer('GROUP')}
+                onAddSwitch={() => layerSystem.addLayer('SWITCH')}
                 onDelete={layerSystem.deleteSelectedLayers}
+                onConvertGroupToSwitch={layerSystem.convertGroupToSwitch}
                 onMoveLayer={layerSystem.moveLayer}
             />
         </div>
@@ -475,6 +494,7 @@ const App: React.FC = () => {
         toggleSync={layerSystem.toggleSync}
         selectLayer={layerSystem.selectLayer}
         toggleExpand={layerSystem.toggleExpand}
+        onSetSwitchSelection={keyframeSystem.setSwitchSelection}
       />
     </div>
   );
