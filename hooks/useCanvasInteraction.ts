@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { Point, ToolType, Keyframe, Stroke, ToolOptions, TransformMode, CameraTransform, ViewportTransform } from '../types';
 import { getMousePos } from '../utils/domUtils';
 import { distance, getRectPoints, getCirclePoints, getTrianglePoints, getStarPoints, getQuadraticBezierPoints, simplifyPath, createThreePointCubicStroke, createSmoothCubicStroke } from '../utils/mathUtils';
