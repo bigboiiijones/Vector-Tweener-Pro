@@ -112,6 +112,16 @@ const getBoxHandles = (bounds: { x: number; y: number; w: number; h: number }, o
     return { scaleHandles, outerHandles, outer };
 };
 
+const pointInRect = (p: Point, r: { x: number; y: number; w: number; h: number }) =>
+    p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+
+const expandRect = (r: { x: number; y: number; w: number; h: number }, pad: number) => ({
+    x: r.x - pad,
+    y: r.y - pad,
+    w: r.w + pad * 2,
+    h: r.h + pad * 2
+});
+
 export const useTransformTool = (
     strokes: Stroke[],
     mode: TransformMode,
@@ -271,6 +281,26 @@ export const useTransformTool = (
                 return true;
             }
 
+            const outerEdgeTol = 9;
+            const nearOuterTop = Math.abs(pos.y - handles.outer.y) <= outerEdgeTol && pos.x >= handles.outer.x && pos.x <= handles.outer.x + handles.outer.w;
+            const nearOuterBottom = Math.abs(pos.y - (handles.outer.y + handles.outer.h)) <= outerEdgeTol && pos.x >= handles.outer.x && pos.x <= handles.outer.x + handles.outer.w;
+            const nearOuterLeft = Math.abs(pos.x - handles.outer.x) <= outerEdgeTol && pos.y >= handles.outer.y && pos.y <= handles.outer.y + handles.outer.h;
+            const nearOuterRight = Math.abs(pos.x - (handles.outer.x + handles.outer.w)) <= outerEdgeTol && pos.y >= handles.outer.y && pos.y <= handles.outer.y + handles.outer.h;
+
+            if (nearOuterTop || nearOuterBottom || nearOuterLeft || nearOuterRight) {
+                const edgeKind: BoxHandleKind = nearOuterTop ? 'skew-n' : nearOuterBottom ? 'skew-s' : nearOuterLeft ? 'skew-w' : 'skew-e';
+                const edgePoint =
+                    edgeKind === 'skew-n' ? { x: handles.outer.x + handles.outer.w / 2, y: handles.outer.y } :
+                    edgeKind === 'skew-s' ? { x: handles.outer.x + handles.outer.w / 2, y: handles.outer.y + handles.outer.h } :
+                    edgeKind === 'skew-w' ? { x: handles.outer.x, y: handles.outer.y + handles.outer.h / 2 } :
+                    { x: handles.outer.x + handles.outer.w, y: handles.outer.y + handles.outer.h / 2 };
+                setActiveBoxHandle({ kind: edgeKind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: edgePoint });
+                setDragStart(pos);
+                const selectedIds = new Set(selection.map(s => s.strokeId));
+                setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
+                return true;
+            }
+
             const edgeTolX = Math.max(3, Math.min(8, rawBounds.w * 0.22));
             const edgeTolY = Math.max(3, Math.min(8, rawBounds.h * 0.22));
             const nearInnerTop = Math.abs(pos.y - rawBounds.y) <= edgeTolY && pos.x >= rawBounds.x - edgeTolX && pos.x <= rawBounds.x + rawBounds.w + edgeTolX;
@@ -299,8 +329,8 @@ export const useTransformTool = (
                 w: visualBounds.w + 52,
                 h: visualBounds.h + 52
             };
-            const pointerInOuterBounds = pos.x >= visualOuter.x && pos.x <= visualOuter.x + visualOuter.w && pos.y >= visualOuter.y && pos.y <= visualOuter.y + visualOuter.h;
-            const pointerInInnerBounds = pos.x >= visualBounds.x && pos.x <= visualBounds.x + visualBounds.w && pos.y >= visualBounds.y && pos.y <= visualBounds.y + visualBounds.h;
+            const pointerInOuterBounds = pointInRect(pos, visualOuter);
+            const pointerInInnerBounds = pointInRect(pos, visualBounds);
             if (pointerInOuterBounds && !pointerInInnerBounds) {
                 setActiveBoxHandle({
                     kind: 'rotate-ring',
@@ -323,6 +353,18 @@ export const useTransformTool = (
             }
 
             if (pointerInOuterBounds) {
+                return true;
+            }
+
+            const lockDismissBounds = expandRect(visualOuter, 42);
+            if (pointInRect(pos, lockDismissBounds)) {
+                return true;
+            }
+
+            if (!isShift) {
+                setSelection([]);
+                setCentroid(null);
+                setTransformCenter(null);
                 return true;
             }
         }
