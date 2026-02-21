@@ -2,11 +2,8 @@ import { Point, Stroke } from '../types';
 import { distance } from '../utils/mathUtils';
 
 export interface TransformPostProcessOptions {
-  autoClose: boolean;
   autoMerge: boolean;
   bezierAdaptive: boolean;
-  drawFill: boolean;
-  fillColor: string;
   closeThreshold: number;
 }
 
@@ -70,28 +67,6 @@ const adaptJointToBezier = (points: Point[], joinIndex: number) => {
   };
 };
 
-const applyAutoClose = (strokes: Stroke[], options: TransformPostProcessOptions): Stroke[] => {
-  return strokes.map((stroke) => {
-    if (stroke.points.length < 3 || stroke.isClosed) return stroke;
-    const first = stroke.points[0];
-    const last = stroke.points[stroke.points.length - 1];
-    if (distance(first, last) > options.closeThreshold) return stroke;
-
-    const closedPoints = [...stroke.points.slice(0, -1), first];
-    if (options.bezierAdaptive) {
-      adaptClosedSeamToBezier(closedPoints);
-      adaptJointToBezier(closedPoints, Math.max(1, closedPoints.length - 2));
-      adaptJointToBezier(closedPoints, 1);
-    }
-
-    return {
-      ...stroke,
-      isClosed: true,
-      fillColor: options.drawFill ? (stroke.fillColor || options.fillColor) : stroke.fillColor,
-      points: closedPoints
-    };
-  });
-};
 
 export const postProcessTransformedStrokes = (
   strokes: Stroke[],
@@ -99,9 +74,6 @@ export const postProcessTransformedStrokes = (
 ): Stroke[] => {
   let next = [...strokes];
 
-  if (options.autoClose) {
-    next = applyAutoClose(next, options);
-  }
 
   if (options.autoMerge) {
     const consumed = new Set<string>();
@@ -149,9 +121,6 @@ export const postProcessTransformedStrokes = (
     next = merged;
   }
 
-  if (options.autoClose) {
-    next = applyAutoClose(next, options);
-  }
 
   return next;
 };

@@ -372,20 +372,6 @@ export const useCanvasInteraction = ({
         if (currentTool === ToolType.PEN) {
             setCurrentStroke([snappedPos]);
         } else if (currentTool === ToolType.POLYLINE || currentTool === ToolType.MOTION_PATH || currentTool === ToolType.ADD_POINTS) {
-            if (toolOptions.autoClose && pendingPoints.length > 2 && distance(snappedPos, pendingPoints[0]) < 15) {
-                // Close loop (if near start)
-                const finalPoints = [...pendingPoints, pendingPoints[0]];
-                const commitTool = currentTool === ToolType.ADD_POINTS ? ToolType.ADD_POINTS : currentTool;
-                const pointsToCommit = currentTool === ToolType.ADD_POINTS
-                    ? withAutoBezierForAddPoints(finalPoints, addPointSharpIndicesRef.current, true)
-                    : finalPoints;
-                commitStroke(pointsToCommit, commitTool, currentFrameIndex, [], toolOptions, activeLayerId, true);
-                setPendingPoints([]);
-                setCurrentStroke(null);
-                setIsDrawing(false);
-                setDrawingSnapPoint(null);
-                addPointSharpIndicesRef.current.clear();
-            } else {
                 if (currentTool === ToolType.ADD_POINTS) {
                     const sharpCorner = e.altKey || addPointSharpCornerRef.current;
                     const nextIndex = pendingPoints.length;
@@ -401,7 +387,6 @@ export const useCanvasInteraction = ({
                     // Initialize line preview immediately
                     if (pendingPoints.length === 0) setCurrentStroke([snappedPos, snappedPos]);
                 }
-            }
         } else if (currentTool === ToolType.CURVE) {
             if (pendingPoints.length === 0) {
                 // Phase 1 Start: Click and Drag for Line (Start Point)
@@ -554,11 +539,8 @@ export const useCanvasInteraction = ({
              if (isDrawing) {
                  handleTransformUp((modifiedStrokes) => {
                      const postProcessed = postProcessTransformedStrokes(modifiedStrokes, {
-                         autoClose: toolOptions.autoClose,
                          autoMerge: toolOptions.autoMerge,
                          bezierAdaptive: toolOptions.bezierAdaptive,
-                         drawFill: toolOptions.drawFill,
-                         fillColor: toolOptions.defaultFillColor,
                          closeThreshold: Math.max(2, toolOptions.gapClosingDistance / Math.max(0.2, viewport.zoom))
                      });
                      updateStrokes(postProcessed);
@@ -627,21 +609,8 @@ export const useCanvasInteraction = ({
         // Finish Drawing Actions
         if (currentTool === ToolType.PEN) {
             if (currentStroke && currentStroke.length > 1) {
-                let finalStroke = currentStroke;
-                let isClosed = false;
-
-                // Auto-Close Logic
-                if (toolOptions.autoClose) {
-                    const start = currentStroke[0];
-                    const end = currentStroke[currentStroke.length - 1];
-                    if (distance(start, end) < 20 / viewport.zoom) { // 20px threshold
-                        finalStroke = [...currentStroke, start];
-                        isClosed = true;
-                    }
-                }
-
-                const simple = simplifyPath(finalStroke, 2);
-                commitStroke(simple, ToolType.PEN, currentFrameIndex, [], toolOptions, activeLayerId, isClosed);
+                const simple = simplifyPath(currentStroke, 2);
+                commitStroke(simple, ToolType.PEN, currentFrameIndex, [], toolOptions, activeLayerId, false);
             }
             setCurrentStroke(null);
             setIsDrawing(false);

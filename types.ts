@@ -114,7 +114,6 @@ export interface ToolOptions {
     crossLayerSnapping: boolean; // New: Allow vectors to snap across different layers
     crossLayerPainting: boolean;
     crossGroupPainting: boolean;
-    closeCreatesFill: boolean;
     smoothingFactor: number; 
     showBezierHandles: boolean;
     transformMode: TransformMode;
@@ -124,7 +123,6 @@ export interface ToolOptions {
     defaultWidth: number;
     defaultTaperStart: number;
     defaultTaperEnd: number;
-    autoClose: boolean;
     defaultFillColor: string;
     drawStroke: boolean;
     drawFill: boolean;
