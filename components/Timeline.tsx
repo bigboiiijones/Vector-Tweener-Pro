@@ -83,19 +83,7 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
   const { menu: switchMenu, openMenu: openSwitchMenu, closeMenu: closeSwitchMenu } = useContextMenu<SwitchCellMenuPayload>();
 
   const getSwitchCandidates = (switchLayerId: string): Layer[] => {
-      const result: Layer[] = [];
-      const queue = [switchLayerId];
-
-      while (queue.length > 0) {
-          const currentId = queue.shift()!;
-          layers.forEach(layer => {
-              if (layer.parentId !== currentId) return;
-              if (layer.type === 'VECTOR') result.push(layer);
-              if (layer.type === 'GROUP' || layer.type === 'SWITCH') queue.push(layer.id);
-          });
-      }
-
-      return result;
+      return layers.filter(layer => layer.parentId === switchLayerId && (layer.type === 'VECTOR' || layer.type === 'GROUP'));
   };
 
 

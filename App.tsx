@@ -105,7 +105,7 @@ const App: React.FC = () => {
   }, [layerSystem.layers, keyframeSystem.ensureInitialKeyframes]);
   
   // Get content for the composite view (all layers)
-  const displayedStrokes = keyframeSystem.getFrameContent(currentFrameIndex, toolOptions.autoMatchStrategy, layerSystem.layers);
+  const displayedStrokes = keyframeSystem.getFrameContent(currentFrameIndex, toolOptions.autoMatchStrategy, layerSystem.layers, layerSystem.activeLayerId);
   
   // Get active context (for onionskins and tools working on active layer)
   const { prev: prevContext, next: nextContext } = keyframeSystem.getTweenContext(currentFrameIndex, layerSystem.activeLayerId);
