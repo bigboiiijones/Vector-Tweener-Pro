@@ -275,20 +275,25 @@ const App: React.FC = () => {
     skeletons: rigging.skeletons,
     activeBoneId: rigging.activeBoneId,
     pendingParentBoneId: rigging.pendingParentBoneId,
-    viewport,
-    activeLayerId: layerSystem.activeLayerId,
     svgRef,
+    activeLayerId: layerSystem.activeLayerId,
+    displayedStrokes,
     onAddBone: rigging.addBone,
-    onUpdateBoneTail: rigging.updateBoneTail,
-    onSelectBone: rigging.selectBone,
+    onSelectBones: rigging.selectBones,
     onClearBoneSelection: rigging.clearBoneSelection,
-    onRotateBone: rigging.rotateBone,
     onMoveBone: rigging.moveBone,
+    onRotateBone: rigging.rotateBone,
     onSetPendingParent: rigging.setPendingParentBoneId,
     onSetBoneParent: rigging.setBoneParent,
-    onBindPoint: rigging.bindPoint,
     onBindLayer: rigging.bindLayer,
   });
+
+  // Bind selected points to active bone
+  const handleBindSelectedPoints = useCallback(() => {
+    if (!rigging.activeBoneId) return;
+    rigInteraction.commitBindPoints(rigging.activeBoneId, rigging.bindPoint);
+  }, [rigging.activeBoneId, rigging.bindPoint, rigInteraction]);
+
   const deleteSelected = useCallback(() => keyframeSystem.deleteSelected(currentFrameIndex, selection.selectedStrokeIds, layerSystem.activeLayerId), [currentFrameIndex, selection.selectedStrokeIds, keyframeSystem, layerSystem.activeLayerId]);
   const reverseSelected = useCallback(() => keyframeSystem.reverseSelected(currentFrameIndex, selection.selectedStrokeIds, layerSystem.activeLayerId), [currentFrameIndex, selection.selectedStrokeIds, keyframeSystem, layerSystem.activeLayerId]);
   const addKeyframe = useCallback((layerId?: string) => keyframeSystem.addKeyframe(currentFrameIndex, layerId || layerSystem.activeLayerId, layerSystem.layers), [currentFrameIndex, keyframeSystem, layerSystem.activeLayerId, layerSystem.layers]);
@@ -416,27 +421,30 @@ const App: React.FC = () => {
                 />
             </div>
 
-            {/* Rig Mode UI */}
+            {/* Rig Mode UI — horizontal strip at top of canvas, BoneProps floating right */}
             {isRigMode && (
               <>
-                {/* Yellow rig mode indicator */}
-                <div className="absolute top-0 left-0 right-0 h-1 bg-yellow-500 z-[200] pointer-events-none" />
-                <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2 bg-yellow-900/90 border border-yellow-600/50 rounded-full px-3 py-1 text-xs text-yellow-300 font-bold pointer-events-none select-none">
-                  🦴 RIG MODE
-                </div>
+                {/* Top yellow accent line */}
+                <div className="absolute top-0 left-0 right-0 h-0.5 bg-yellow-500 z-[200] pointer-events-none" />
 
-                {/* Rig Toolbar */}
-                <div className="absolute top-4 z-[150] pointer-events-auto" style={{ left: '100px' }}>
+                {/* Horizontal rig toolbar — pinned top center, does not overlap left sidebar */}
+                <div className="absolute top-2 left-0 right-0 z-[160] flex justify-center pointer-events-none">
                   <RigToolbar
                     activeTool={activeRigTool}
                     setActiveTool={setActiveRigTool}
                     onCreateSkeleton={() => rigging.createSkeleton(layerSystem.activeLayerId)}
                     hasActiveSkeleton={!!rigging.activeSkeletonId}
+                    activeLayerName={layerSystem.layers.find(l => l.id === layerSystem.activeLayerId)?.name ?? 'Layer'}
+                    activeBoneId={rigging.activeBoneId}
+                    activeBoneName={rigging.getActiveSkeleton()?.bones.find(b => b.id === rigging.activeBoneId)?.name ?? ''}
+                    selectedBindPointCount={rigInteraction.pendingSelectedPoints.size}
+                    onBindSelectedPoints={handleBindSelectedPoints}
+                    onBindLayer={rigInteraction.handleBindLayer}
                   />
                 </div>
 
-                {/* Bone Properties */}
-                <div className="absolute top-4 z-[150] pointer-events-auto" style={{ left: '160px' }}>
+                {/* Bone properties — floating panel, top-right corner, above layer panel */}
+                <div className="absolute top-12 right-52 z-[155] pointer-events-auto">
                   <BonePropertiesPanel
                     bone={rigging.getActiveSkeleton()?.bones.find(b => b.id === rigging.activeBoneId) || null}
                     onRename={rigging.renameBone}
@@ -446,18 +454,6 @@ const App: React.FC = () => {
                   />
                 </div>
 
-                {/* Bind Layer button */}
-                {activeRigTool === 'BIND_LAYER' && rigging.activeBoneId && (
-                  <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[150] pointer-events-auto">
-                    <button
-                      onClick={rigInteraction.handleBindLayerClick}
-                      className="bg-cyan-700 hover:bg-cyan-600 text-white text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-lg shadow-xl border border-cyan-500/50 transition-colors"
-                    >
-                      Bind "{layerSystem.layers.find(l => l.id === layerSystem.activeLayerId)?.name}" → Selected Bone
-                    </button>
-                  </div>
-                )}
-
                 {/* Parent tool hint */}
                 {activeRigTool === 'BONE_PARENT' && (
                   <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[150] pointer-events-none">
@@ -465,6 +461,15 @@ const App: React.FC = () => {
                       {rigging.pendingParentBoneId
                         ? '✓ Child selected — now click the PARENT bone'
                         : 'Click a bone to set as CHILD, then click its PARENT'}
+                    </div>
+                  </div>
+                )}
+
+                {/* Bind points hint */}
+                {activeRigTool === 'BIND_POINTS' && !rigging.activeBoneId && (
+                  <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[150] pointer-events-none">
+                    <div className="bg-cyan-900/90 border border-cyan-600/50 text-cyan-200 text-xs px-4 py-2 rounded-lg">
+                      Select a bone first to use Bind Points
                     </div>
                   </div>
                 )}
@@ -540,30 +545,29 @@ const App: React.FC = () => {
                       activeSkeletonId={rigging.activeSkeletonId}
                       selectedBoneIds={rigging.selectedBoneIds}
                       activeTool={activeRigTool}
-                      boundPoints={rigging.boundPoints}
                       viewport={viewport}
                       onBonePointerDown={rigInteraction.handleBonePointerDown as any}
-                      onCanvasPointerDown={rigInteraction.handleCanvasPointerDown as any}
-                      svgWidth={projectSettings.canvasSize.width}
-                      svgHeight={projectSettings.canvasSize.height}
+                      boxSelectRect={rigInteraction.boxSelectRect}
                     />
                     <BindPointsOverlay
                       strokes={displayedStrokes}
                       boundPoints={rigging.boundPoints}
+                      pendingSelectedPoints={rigInteraction.pendingSelectedPoints}
                       activeBoneId={rigging.activeBoneId}
                       activeTool={activeRigTool}
-                      onPointClick={rigInteraction.handlePointClick}
+                      bindBoxRect={rigInteraction.bindBoxRect}
+                      onPointPointerDown={rigInteraction.handlePointPointerDown as any}
                     />
-                    {/* Preview line while creating a bone */}
+                    {/* Bone creation preview */}
                     {rigInteraction.creatingHead && rigInteraction.previewTail && (
-                      <g>
-                        <circle cx={rigInteraction.creatingHead.x} cy={rigInteraction.creatingHead.y} r={6} fill="#fde68a" opacity={0.8} />
+                      <g style={{ pointerEvents: 'none' }}>
+                        <circle cx={rigInteraction.creatingHead.x} cy={rigInteraction.creatingHead.y} r={6} fill="#fde68a" opacity={0.9} />
                         <line
                           x1={rigInteraction.creatingHead.x} y1={rigInteraction.creatingHead.y}
                           x2={rigInteraction.previewTail.x} y2={rigInteraction.previewTail.y}
-                          stroke="#f59e0b" strokeWidth={2} strokeDasharray="4,3" opacity={0.9}
+                          stroke="#f59e0b" strokeWidth={2} strokeDasharray="5,4" opacity={0.85}
                         />
-                        <circle cx={rigInteraction.previewTail.x} cy={rigInteraction.previewTail.y} r={4} fill="#f59e0b" opacity={0.8} />
+                        <circle cx={rigInteraction.previewTail.x} cy={rigInteraction.previewTail.y} r={4} fill="#f59e0b" opacity={0.85} />
                       </g>
                     )}
                   </>
