@@ -1,95 +1,107 @@
-import React, { useCallback } from 'react';
-import { Skeleton, Bone, BoundPoint, RigTool } from './riggingTypes';
-import { pointToSegmentDistance } from './riggingMath';
+import React from 'react';
+import { Skeleton, Bone, RigTool } from './riggingTypes';
 
 interface SkeletonOverlayProps {
   skeletons: Skeleton[];
   activeSkeletonId: string | null;
   selectedBoneIds: Set<string>;
   activeTool: RigTool;
-  boundPoints: BoundPoint[];
   viewport: { x: number; y: number; zoom: number };
-  // Interaction callbacks
   onBonePointerDown: (e: React.PointerEvent, boneId: string, part: 'head' | 'tail' | 'body') => void;
-  onCanvasPointerDown: (e: React.PointerEvent) => void;
-  // SVG dimensions
-  svgWidth: number;
-  svgHeight: number;
+  // Box-select rect in canvas coords (null when not dragging)
+  boxSelectRect: { x: number; y: number; w: number; h: number } | null;
 }
 
-const BONE_HEAD_R = 8;
-const BONE_TAIL_R = 5;
 const SELECTED_COLOR = '#facc15';
-const DEFAULT_COLOR = '#f59e0b';
 
-function renderBone(
-  bone: Bone,
-  isSelected: boolean,
-  activeTool: RigTool,
-  onPointerDown: (e: React.PointerEvent, boneId: string, part: 'head' | 'tail' | 'body') => void
-) {
-  const color = isSelected ? SELECTED_COLOR : (bone.color || DEFAULT_COLOR);
-  const opacity = 0.85;
+function BoneShape({
+  bone,
+  isSelected,
+  activeTool,
+  onPointerDown,
+}: {
+  bone: Bone;
+  isSelected: boolean;
+  activeTool: RigTool;
+  onPointerDown: (e: React.PointerEvent, boneId: string, part: 'head' | 'tail' | 'body') => void;
+}) {
+  const color = isSelected ? SELECTED_COLOR : (bone.color || '#f59e0b');
   const dx = bone.tailX - bone.headX;
   const dy = bone.tailY - bone.headY;
   const len = Math.sqrt(dx * dx + dy * dy);
-  if (len < 1) return null;
+  if (len < 2) return null;
 
-  // Build bone diamond shape (Moho-style)
   const nx = -dy / len;
   const ny = dx / len;
-  const width = Math.min(12, len * 0.18);
+  const width = Math.max(4, Math.min(14, len * 0.18));
 
-  // Diamond control points: head -> wide point (20% along) -> tail
+  // Moho-style diamond: head → wide point (25% along) → tail
   const midX = bone.headX + dx * 0.25;
   const midY = bone.headY + dy * 0.25;
   const p1x = midX + nx * width;
   const p1y = midY + ny * width;
   const p2x = midX - nx * width;
   const p2y = midY - ny * width;
-
   const dPath = `M ${bone.headX} ${bone.headY} L ${p1x} ${p1y} L ${bone.tailX} ${bone.tailY} L ${p2x} ${p2y} Z`;
 
+  const isSelectTool = activeTool === 'BONE_SELECT';
+  const isMoveTool = activeTool === 'BONE_MOVE';
+  const isRotateTool = activeTool === 'BONE_ROTATE';
+  const interactable = isSelectTool || isMoveTool || isRotateTool || activeTool === 'BONE_PARENT';
+
   return (
-    <g key={bone.id} style={{ cursor: activeTool === 'BONE_SELECT' ? 'pointer' : 'default' }}>
-      {/* Bone body */}
+    <g style={{ pointerEvents: interactable ? 'auto' : 'none' }}>
+      {/* Wide hit-area transparent overlay for easy clicking */}
       <path
         d={dPath}
-        fill={color}
-        fillOpacity={opacity}
-        stroke={isSelected ? '#fff' : '#d97706'}
-        strokeWidth={isSelected ? 1.5 : 0.8}
+        fill="transparent"
+        stroke="transparent"
+        strokeWidth={Math.max(8, width * 2)}
+        style={{ cursor: interactable ? 'pointer' : 'default' }}
         onPointerDown={e => onPointerDown(e, bone.id, 'body')}
       />
 
-      {/* Head circle */}
+      {/* Visible bone body */}
+      <path
+        d={dPath}
+        fill={color}
+        fillOpacity={isSelected ? 0.95 : 0.8}
+        stroke={isSelected ? '#fff' : '#92400e'}
+        strokeWidth={isSelected ? 1.5 : 0.8}
+        style={{ pointerEvents: 'none' }}
+      />
+
+      {/* Head joint */}
       <circle
         cx={bone.headX}
         cy={bone.headY}
-        r={BONE_HEAD_R / 1.5}
+        r={isSelected ? 7 : 5}
         fill={isSelected ? '#fff' : '#fde68a'}
         stroke={color}
-        strokeWidth={1}
-        style={{ cursor: 'grab' }}
+        strokeWidth={1.5}
+        style={{ cursor: isSelectTool || isMoveTool ? 'grab' : 'default', pointerEvents: interactable ? 'auto' : 'none' }}
         onPointerDown={e => { e.stopPropagation(); onPointerDown(e, bone.id, 'head'); }}
       />
 
-      {/* Tail circle */}
+      {/* Tail joint */}
       <circle
         cx={bone.tailX}
         cy={bone.tailY}
-        r={BONE_TAIL_R}
-        fill={isSelected ? '#facc15' : '#92400e'}
+        r={isSelected ? 6 : 4}
+        fill={isSelected ? '#facc15' : '#78350f'}
         stroke={isSelected ? '#fff' : '#d97706'}
-        strokeWidth={1}
-        style={{ cursor: activeTool === 'BONE_SELECT' ? 'crosshair' : 'default' }}
+        strokeWidth={1.5}
+        style={{
+          cursor: isSelectTool || isRotateTool ? 'crosshair' : 'default',
+          pointerEvents: interactable ? 'auto' : 'none',
+        }}
         onPointerDown={e => { e.stopPropagation(); onPointerDown(e, bone.id, 'tail'); }}
       />
 
-      {/* Bone name label */}
+      {/* Bone name */}
       <text
-        x={(bone.headX + bone.tailX) / 2 + 4}
-        y={(bone.headY + bone.tailY) / 2 - 4}
+        x={(bone.headX + bone.tailX) / 2 + 5}
+        y={(bone.headY + bone.tailY) / 2 - 5}
         fontSize="9"
         fill={isSelected ? '#fef3c7' : '#fde68a'}
         style={{ pointerEvents: 'none', userSelect: 'none' }}
@@ -97,9 +109,6 @@ function renderBone(
       >
         {bone.name}
       </text>
-
-      {/* Parent connection line */}
-      {/* handled by parent iteration */}
     </g>
   );
 }
@@ -109,55 +118,63 @@ export const SkeletonOverlay: React.FC<SkeletonOverlayProps> = ({
   activeSkeletonId,
   selectedBoneIds,
   activeTool,
-  boundPoints,
-  viewport,
   onBonePointerDown,
-  onCanvasPointerDown,
-  svgWidth,
-  svgHeight,
+  boxSelectRect,
 }) => {
-  const activeSkeleton = skeletons.find(s => s.id === activeSkeletonId);
-  const allSkeletons = skeletons;
-
   return (
-    <g className="skeleton-overlay">
-      {/* Render all skeletons (non-active as ghost) */}
-      {allSkeletons.map(skeleton => {
+    // Must be pointer-events-auto so bone clicks register (the SVG root is pointer-events-none)
+    <g className="skeleton-overlay" style={{ pointerEvents: 'none' }}>
+      {skeletons.map(skeleton => {
         const isActive = skeleton.id === activeSkeletonId;
         return (
-          <g key={skeleton.id} opacity={isActive ? 1 : 0.3}>
-            {/* Parent connection lines */}
+          <g key={skeleton.id} opacity={isActive ? 1 : 0.25}>
+            {/* Parent chain lines */}
             {skeleton.bones.map(bone => {
               if (!bone.parentBoneId) return null;
               const parent = skeleton.bones.find(b => b.id === bone.parentBoneId);
               if (!parent) return null;
               return (
                 <line
-                  key={`parent-${bone.id}`}
-                  x1={parent.tailX}
-                  y1={parent.tailY}
-                  x2={bone.headX}
-                  y2={bone.headY}
-                  stroke="#6366f1"
+                  key={`chain-${bone.id}`}
+                  x1={parent.tailX} y1={parent.tailY}
+                  x2={bone.headX} y2={bone.headY}
+                  stroke="#818cf8"
                   strokeWidth={1}
                   strokeDasharray="3,3"
-                  opacity={0.6}
+                  opacity={0.7}
                   style={{ pointerEvents: 'none' }}
                 />
               );
             })}
+
             {/* Bone shapes */}
-            {skeleton.bones.map(bone =>
-              renderBone(
-                bone,
-                isActive && selectedBoneIds.has(bone.id),
-                activeTool,
-                onBonePointerDown
-              )
-            )}
+            {skeleton.bones.map(bone => (
+              <BoneShape
+                key={bone.id}
+                bone={bone}
+                isSelected={isActive && selectedBoneIds.has(bone.id)}
+                activeTool={activeTool}
+                onPointerDown={onBonePointerDown}
+              />
+            ))}
           </g>
         );
       })}
+
+      {/* Box select rect */}
+      {boxSelectRect && (
+        <rect
+          x={boxSelectRect.x}
+          y={boxSelectRect.y}
+          width={boxSelectRect.w}
+          height={boxSelectRect.h}
+          fill="rgba(250,204,21,0.08)"
+          stroke="#facc15"
+          strokeWidth={1}
+          strokeDasharray="4,3"
+          style={{ pointerEvents: 'none' }}
+        />
+      )}
     </g>
   );
 };

@@ -5,55 +5,96 @@ import { Stroke } from '../types';
 interface BindPointsOverlayProps {
   strokes: Stroke[];
   boundPoints: BoundPoint[];
+  // Points currently staged for binding (selected in UI, not yet committed)
+  pendingSelectedPoints: Set<string>; // key = `${strokeId}:${pointIndex}`
   activeBoneId: string | null;
   activeTool: string;
-  onPointClick: (strokeId: string, pointIndex: number, x: number, y: number) => void;
+  // Drag-box selection rect in canvas coords
+  bindBoxRect: { x: number; y: number; w: number; h: number } | null;
+  onPointPointerDown: (e: React.PointerEvent, strokeId: string, pointIndex: number) => void;
 }
 
-const BOUND_COLOR = '#22d3ee'; // cyan for bound points
-const HOVER_COLOR = '#f0abfc'; // pink for hoverable
-const POINT_R = 5;
+const PT_R = 6;
+
+function pointKey(strokeId: string, idx: number) {
+  return `${strokeId}:${idx}`;
+}
 
 export const BindPointsOverlay: React.FC<BindPointsOverlayProps> = ({
   strokes,
   boundPoints,
+  pendingSelectedPoints,
   activeBoneId,
   activeTool,
-  onPointClick,
+  bindBoxRect,
+  onPointPointerDown,
 }) => {
-  if (activeTool !== 'BIND_POINTS' || !activeBoneId) return null;
+  if (activeTool !== 'BIND_POINTS') return null;
 
   return (
-    <g className="bind-points-overlay">
+    // pointer-events-auto so clicks on points register despite parent SVG being none
+    <g className="bind-points-overlay" style={{ pointerEvents: 'none' }}>
       {strokes.map(stroke => {
-        if (!stroke.points || stroke.points.length === 0) return null;
-        return stroke.points.map((pt, idx) => {
-          const isBound = boundPoints.some(
-            bp => bp.strokeId === stroke.id && bp.pointIndex === idx
-          );
-          const boundToCurrent = boundPoints.some(
-            bp => bp.strokeId === stroke.id && bp.pointIndex === idx && bp.boneId === activeBoneId
-          );
+        if (!stroke.points?.length) return null;
+        return (
+          <g key={stroke.id}>
+            {stroke.points.map((pt, idx) => {
+              const key = pointKey(stroke.id, idx);
+              const boundToCurrent = boundPoints.some(
+                bp => bp.strokeId === stroke.id && bp.pointIndex === idx && bp.boneId === activeBoneId
+              );
+              const boundToOther = !boundToCurrent && boundPoints.some(
+                bp => bp.strokeId === stroke.id && bp.pointIndex === idx
+              );
+              const isPending = pendingSelectedPoints.has(key);
 
-          return (
-            <circle
-              key={`${stroke.id}-${idx}`}
-              cx={pt.x}
-              cy={pt.y}
-              r={POINT_R}
-              fill={boundToCurrent ? BOUND_COLOR : isBound ? '#f59e0b' : 'transparent'}
-              stroke={boundToCurrent ? '#06b6d4' : isBound ? '#f59e0b' : HOVER_COLOR}
-              strokeWidth={boundToCurrent ? 2 : 1.5}
-              style={{ cursor: 'pointer' }}
-              opacity={0.9}
-              onPointerDown={e => {
-                e.stopPropagation();
-                onPointClick(stroke.id, idx, pt.x, pt.y);
-              }}
-            />
-          );
-        });
+              // Color coding:
+              // cyan solid = bound to current bone
+              // amber = bound to another bone
+              // magenta ring = pending (staged for binding)
+              // gray ring = unbound, hoverable
+              let fill = 'transparent';
+              let stroke2 = 'rgba(200,200,200,0.4)';
+              let sw = 1;
+              let r = PT_R;
+
+              if (boundToCurrent) { fill = '#22d3ee'; stroke2 = '#0891b2'; sw = 2; }
+              else if (boundToOther) { fill = '#fbbf24'; stroke2 = '#d97706'; sw = 1.5; }
+              if (isPending) { stroke2 = '#e879f9'; sw = 2.5; r = PT_R + 2; fill = isPending && !boundToCurrent ? 'rgba(232,121,249,0.3)' : fill; }
+
+              return (
+                <circle
+                  key={key}
+                  cx={pt.x}
+                  cy={pt.y}
+                  r={r}
+                  fill={fill}
+                  stroke={stroke2}
+                  strokeWidth={sw}
+                  opacity={0.95}
+                  style={{ pointerEvents: 'auto', cursor: 'crosshair' }}
+                  onPointerDown={e => { e.stopPropagation(); onPointPointerDown(e, stroke.id, idx); }}
+                />
+              );
+            })}
+          </g>
+        );
       })}
+
+      {/* Drag-select box */}
+      {bindBoxRect && (
+        <rect
+          x={bindBoxRect.x}
+          y={bindBoxRect.y}
+          width={bindBoxRect.w}
+          height={bindBoxRect.h}
+          fill="rgba(14,165,233,0.08)"
+          stroke="#0ea5e9"
+          strokeWidth={1}
+          strokeDasharray="4,3"
+          style={{ pointerEvents: 'none' }}
+        />
+      )}
     </g>
   );
 };

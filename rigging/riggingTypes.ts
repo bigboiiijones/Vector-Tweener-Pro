@@ -60,4 +60,4 @@ export interface BoneKeyframe {
   };
 }
 
-export type RigTool = 'BONE_CREATE' | 'BONE_SELECT' | 'BONE_PARENT' | 'BIND_POINTS' | 'BIND_LAYER';
+export type RigTool = 'BONE_CREATE' | 'BONE_SELECT' | 'BONE_MOVE' | 'BONE_ROTATE' | 'BONE_PARENT' | 'BIND_POINTS' | 'BIND_LAYER';
