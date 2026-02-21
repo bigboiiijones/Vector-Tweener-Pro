@@ -42,7 +42,7 @@ export const useKeyboardShortcuts = ({
             // Context Aware Shortcuts
             if (activePanel === 'CANVAS') {
                 if (e.key === 'Enter') {
-                    if (currentTool === ToolType.POLYLINE) forceFinishPolyline();
+                    if (currentTool === ToolType.POLYLINE || currentTool === ToolType.ADD_POINTS) forceFinishPolyline();
                 }
                 if (e.key === 'Escape') {
                     resetInteraction();
@@ -53,6 +53,7 @@ export const useKeyboardShortcuts = ({
                 if (e.key === 'b') setTool(ToolType.BIND);
                 if (e.key === 'l') setTool(ToolType.POLYLINE);
                 if (e.key === 'c') setTool(ToolType.CURVE);
+                if (e.key === 'a') setTool(ToolType.ADD_POINTS);
                 if (e.key === 'm') setTool(ToolType.MOTION_PATH);
                 if (e.key === 'k') setTool(ToolType.CORRESPONDENCE);
                 if (e.key === 'g') setTool(ToolType.PAINT_BUCKET);

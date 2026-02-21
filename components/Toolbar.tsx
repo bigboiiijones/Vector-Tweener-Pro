@@ -47,6 +47,7 @@ export const Toolbar: React.FC<ToolbarProps> = React.memo(({
     { id: ToolType.PEN, icon: <PenTool size={18} />, label: 'Pen (P)' },
     { id: ToolType.POLYLINE, icon: <Activity size={18} />, label: 'Polyline (L)' },
     { id: ToolType.CURVE, icon: <Spline size={18} />, label: 'Curve (C)' },
+    { id: ToolType.ADD_POINTS, icon: <PenTool size={18} />, label: 'Add Points (A) - Bezier by default, Alt/X for sharp corners' },
     { id: ToolType.RECTANGLE, icon: <Square size={18} />, label: 'Rectangle' },
     { id: ToolType.CIRCLE, icon: <Circle size={18} />, label: 'Circle' },
     { id: ToolType.TRIANGLE, icon: <Triangle size={18} />, label: 'Triangle' },

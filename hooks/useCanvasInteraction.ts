@@ -1,13 +1,62 @@
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Point, ToolType, Keyframe, Stroke, ToolOptions, TransformMode, CameraTransform, ViewportTransform } from '../types';
 import { getMousePos } from '../utils/domUtils';
-import { distance, getRectPoints, getCirclePoints, getTrianglePoints, getStarPoints, getQuadraticBezierPoints, simplifyPath, createThreePointCubicStroke, createSmoothCubicStroke } from '../utils/mathUtils';
+import { distance, getRectPoints, getCirclePoints, getTrianglePoints, getStarPoints, simplifyPath, createThreePointCubicStroke } from '../utils/mathUtils';
 import { calculateSelection } from '../utils/selectionUtils';
 import { getSnappedPoint } from '../logic/snapping';
 import { useTransformTool } from './useTransformTool';
 import { findPaintTarget } from '../logic/paintBucket';
 import { postProcessTransformedStrokes } from '../logic/transformPostprocess';
+
+
+
+const ADD_POINT_HANDLE_FACTOR = 0.25;
+
+const withAutoBezierForAddPoints = (points: Point[], sharpCorner: boolean = false): Point[] => {
+    if (points.length < 2) return points;
+
+    const shaped = points.map(p => ({ x: p.x, y: p.y }));
+    const lastIndex = shaped.length - 1;
+
+    if (lastIndex >= 1) {
+        const prev = shaped[lastIndex - 1];
+        const curr = shaped[lastIndex];
+        const segLen = distance(prev, curr);
+
+        if (segLen > 0.001) {
+            const handleLen = Math.max(8, segLen * ADD_POINT_HANDLE_FACTOR);
+            const vx = (curr.x - prev.x) / segLen;
+            const vy = (curr.y - prev.y) / segLen;
+
+            if (!sharpCorner) {
+                prev.cp2 = { x: prev.x + vx * handleLen, y: prev.y + vy * handleLen };
+                curr.cp1 = { x: curr.x - vx * handleLen, y: curr.y - vy * handleLen };
+            } else {
+                prev.cp2 = undefined;
+                curr.cp1 = undefined;
+            }
+        }
+    }
+
+    if (lastIndex >= 2) {
+        const a = shaped[lastIndex - 2];
+        const b = shaped[lastIndex - 1];
+        const c = shaped[lastIndex];
+        const ab = distance(a, b);
+        const bc = distance(b, c);
+        if (ab > 0.001 && bc > 0.001 && !sharpCorner) {
+            const vx = (c.x - a.x) / (ab + bc);
+            const vy = (c.y - a.y) / (ab + bc);
+            const inLen = Math.max(8, ab * ADD_POINT_HANDLE_FACTOR);
+            const outLen = Math.max(8, bc * ADD_POINT_HANDLE_FACTOR);
+            b.cp1 = { x: b.x - vx * inLen, y: b.y - vy * inLen };
+            b.cp2 = { x: b.x + vx * outLen, y: b.y + vy * outLen };
+        }
+    }
+
+    return shaped;
+};
 
 interface InteractionProps {
     currentTool: ToolType;
@@ -81,6 +130,7 @@ export const useCanvasInteraction = ({
     // Viewport Panning Refs
     const isPanningRef = useRef(false);
     const lastPanPoint = useRef<{x: number, y: number} | null>(null);
+    const addPointSharpCornerRef = useRef(false);
 
     // Transform Tool Hook
     const { 
@@ -105,13 +155,37 @@ export const useCanvasInteraction = ({
 
     const forceFinishPolyline = () => {
         if (pendingPoints.length > 1) {
-            commitStroke(pendingPoints, currentTool, currentFrameIndex, [], toolOptions, activeLayerId);
+            const commitTool = currentTool === ToolType.ADD_POINTS ? ToolType.ADD_POINTS : currentTool;
+            commitStroke(pendingPoints, commitTool, currentFrameIndex, [], toolOptions, activeLayerId);
             setPendingPoints([]);
             setCurrentStroke(null);
             setIsDrawing(false);
             setDrawingSnapPoint(null);
         }
     };
+
+
+
+    useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key.toLowerCase() === 'x') {
+                addPointSharpCornerRef.current = true;
+            }
+        };
+        const onKeyUp = (event: KeyboardEvent) => {
+            if (event.key.toLowerCase() === 'x') {
+                addPointSharpCornerRef.current = false;
+            }
+        };
+
+        window.addEventListener('keydown', onKeyDown);
+        window.addEventListener('keyup', onKeyUp);
+
+        return () => {
+            window.removeEventListener('keydown', onKeyDown);
+            window.removeEventListener('keyup', onKeyUp);
+        };
+    }, []);
 
     const resetInteraction = () => {
         setIsDrawing(false);
@@ -167,7 +241,7 @@ export const useCanvasInteraction = ({
         const isCtrl = e.ctrlKey || e.metaKey;
 
         // Clear selection if drawing new shape/line (unless holding shift)
-        if (!isShift && [ToolType.PEN, ToolType.POLYLINE, ToolType.CURVE, ToolType.RECTANGLE, ToolType.CIRCLE, ToolType.TRIANGLE, ToolType.STAR].includes(currentTool)) {
+        if (!isShift && [ToolType.PEN, ToolType.POLYLINE, ToolType.CURVE, ToolType.ADD_POINTS, ToolType.RECTANGLE, ToolType.CIRCLE, ToolType.TRIANGLE, ToolType.STAR].includes(currentTool)) {
             setSelectedStrokeIds(new Set());
         }
 
@@ -236,19 +310,28 @@ export const useCanvasInteraction = ({
 
         if (currentTool === ToolType.PEN) {
             setCurrentStroke([snappedPos]);
-        } else if (currentTool === ToolType.POLYLINE || currentTool === ToolType.MOTION_PATH) {
+        } else if (currentTool === ToolType.POLYLINE || currentTool === ToolType.MOTION_PATH || currentTool === ToolType.ADD_POINTS) {
             if (pendingPoints.length > 2 && distance(snappedPos, pendingPoints[0]) < 15) {
                 // Close loop (if near start)
                 const finalPoints = [...pendingPoints, pendingPoints[0]];
-                commitStroke(finalPoints, currentTool, currentFrameIndex, [], toolOptions, activeLayerId, true);
+                const commitTool = currentTool === ToolType.ADD_POINTS ? ToolType.ADD_POINTS : currentTool;
+                commitStroke(finalPoints, commitTool, currentFrameIndex, [], toolOptions, activeLayerId, true);
                 setPendingPoints([]);
                 setCurrentStroke(null);
                 setIsDrawing(false);
                 setDrawingSnapPoint(null);
             } else {
-                setPendingPoints(prev => [...prev, snappedPos]);
-                // Initialize line preview immediately
-                if (pendingPoints.length === 0) setCurrentStroke([snappedPos, snappedPos]);
+                if (currentTool === ToolType.ADD_POINTS) {
+                    const sharpCorner = e.altKey || addPointSharpCornerRef.current;
+                    const nextPending = withAutoBezierForAddPoints([...pendingPoints, snappedPos], sharpCorner);
+                    setPendingPoints(nextPending);
+                    if (nextPending.length === 1) setCurrentStroke([snappedPos, snappedPos]);
+                    else setCurrentStroke(nextPending);
+                } else {
+                    setPendingPoints(prev => [...prev, snappedPos]);
+                    // Initialize line preview immediately
+                    if (pendingPoints.length === 0) setCurrentStroke([snappedPos, snappedPos]);
+                }
             }
         } else if (currentTool === ToolType.CURVE) {
             if (pendingPoints.length === 0) {
@@ -356,10 +439,15 @@ export const useCanvasInteraction = ({
         // Visual Preview updates for other tools
         if (currentTool === ToolType.PEN) {
              if (currentStroke) setCurrentStroke([...currentStroke, snappedPos]);
-        } else if (currentTool === ToolType.POLYLINE || currentTool === ToolType.MOTION_PATH) {
+        } else if (currentTool === ToolType.POLYLINE || currentTool === ToolType.MOTION_PATH || currentTool === ToolType.ADD_POINTS) {
              if (pendingPoints.length > 0) {
-                 // Polyline preview must show ALL points + current snap
-                 setCurrentStroke([...pendingPoints, snappedPos]);
+                 if (currentTool === ToolType.ADD_POINTS) {
+                     const sharpCorner = e.altKey || addPointSharpCornerRef.current;
+                     setCurrentStroke(withAutoBezierForAddPoints([...pendingPoints, snappedPos], sharpCorner));
+                 } else {
+                     // Polyline preview must show ALL points + current snap
+                     setCurrentStroke([...pendingPoints, snappedPos]);
+                 }
              }
         } else if (dragStart.current) {
              // Shapes
@@ -516,7 +604,7 @@ export const useCanvasInteraction = ({
             setCurrentStroke(null);
             setIsDrawing(false);
             setDrawingSnapPoint(null);
-        } else if (currentTool === ToolType.POLYLINE || currentTool === ToolType.MOTION_PATH) {
+        } else if (currentTool === ToolType.POLYLINE || currentTool === ToolType.MOTION_PATH || currentTool === ToolType.ADD_POINTS) {
              // Handled on PointerDown mostly, this just keeps drawing state active
         } else {
             // Shapes (Finish on Up)

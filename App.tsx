@@ -61,7 +61,7 @@ const App: React.FC = () => {
       overwriteTargets: false, 
       swapTargets: false,
       autoMatchStrategy: 'INDEX',
-      snappingEnabled: false,
+      snappingEnabled: true,
       crossLayerSnapping: false,
       crossLayerPainting: true,
       crossGroupPainting: true,
@@ -108,7 +108,7 @@ const App: React.FC = () => {
       setToolOptions(prev => ({
           ...prev,
           transformMode: TransformMode.TRANSLATE,
-          snappingEnabled: currentTool === ToolType.CURVE ? true : prev.snappingEnabled
+          snappingEnabled: [ToolType.CURVE, ToolType.PEN, ToolType.ADD_POINTS].includes(currentTool) ? true : prev.snappingEnabled
       }));
   }, [currentTool]);
 

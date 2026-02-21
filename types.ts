@@ -164,6 +164,7 @@ export enum ToolType {
   ANCHOR = 'ANCHOR',
   POLYLINE = 'POLYLINE', 
   CURVE = 'CURVE',       
+  ADD_POINTS = 'ADD_POINTS',
   RECTANGLE = 'RECTANGLE',
   CIRCLE = 'CIRCLE',
   TRIANGLE = 'TRIANGLE',
