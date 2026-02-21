@@ -86,6 +86,19 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
       return layers.filter(layer => layer.parentId === switchLayerId && (layer.type === 'VECTOR' || layer.type === 'GROUP'));
   };
 
+  const getFirstVectorDescendant = (layerId: string): string | null => {
+      const queue = [layerId];
+      while (queue.length > 0) {
+          const currentId = queue.shift()!;
+          const children = layers.filter(layer => layer.parentId === currentId);
+          for (const child of children) {
+              if (child.type === 'VECTOR') return child.id;
+              if (child.type === 'GROUP' || child.type === 'SWITCH') queue.push(child.id);
+          }
+      }
+      return null;
+  };
+
 
   // Data prep
   const keyframesByLayer = useMemo(() => {
@@ -543,6 +556,10 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
                         className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-blue-600"
                         onClick={() => {
                             onSetSwitchSelection(switchMenu.payload.switchLayerId, candidate.id, switchMenu.payload.frameIndex);
+                            const layerToActivate = candidate.type === 'VECTOR' ? candidate.id : getFirstVectorDescendant(candidate.id);
+                            if (layerToActivate) {
+                                selectLayer(layerToActivate, false, false);
+                            }
                             closeSwitchMenu();
                         }}
                     >
