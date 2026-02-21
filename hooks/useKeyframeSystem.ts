@@ -670,6 +670,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
                     const newEnd = processedPoints[processedPoints.length - 1];
                     let targetStroke: Stroke | null = null;
                     let mergeType: 'APPEND_TO_END' | 'PREPEND_TO_START' | null = null;
+                    let closesTargetStroke = false;
 
                     for (const s of updatedStrokes) {
                         const sStart = s.points[0];
@@ -698,6 +699,9 @@ export const useKeyframeSystem = (totalFrames: number) => {
                                 cp2: outgoingJoin.cp2 || mergedPoints[joinIndex].cp2
                             };
                             if (options.bezierAdaptive) mergedPoints = adaptJointToBezier(mergedPoints, joinIndex);
+                            const targetStart = targetStroke.points[0];
+                            const newTail = processedPoints[processedPoints.length - 1];
+                            closesTargetStroke = distance(targetStart, newTail) < MERGE_THRESHOLD;
                         } else {
                             mergedPoints = [...processedPoints, ...targetStroke.points.slice(1)];
                             const joinIndex = Math.max(1, processedPoints.length - 1);
@@ -709,8 +713,26 @@ export const useKeyframeSystem = (totalFrames: number) => {
                                 cp2: outgoingJoin.cp2 || mergedPoints[joinIndex].cp2
                             };
                             if (options.bezierAdaptive) mergedPoints = adaptJointToBezier(mergedPoints, joinIndex);
+                            const targetEnd = targetStroke.points[targetStroke.points.length - 1];
+                            const newHead = processedPoints[0];
+                            closesTargetStroke = distance(targetEnd, newHead) < MERGE_THRESHOLD;
                         }
-                        const mergedStroke = { ...targetStroke, points: mergedPoints, isSelected: true };
+
+                        if (closesTargetStroke && mergedPoints.length > 2) {
+                            if (distance(mergedPoints[0], mergedPoints[mergedPoints.length - 1]) < MERGE_THRESHOLD) {
+                                mergedPoints = [...mergedPoints.slice(0, -1)];
+                            }
+                            if (options.bezierAdaptive && mergedPoints.length > 3) {
+                                const closedPoints = [...mergedPoints, mergedPoints[0]];
+                                mergedPoints = adaptJointToBezier(closedPoints, closedPoints.length - 2).slice(0, -1);
+                            }
+                        }
+                        const mergedStroke = { 
+                            ...targetStroke, 
+                            points: mergedPoints, 
+                            isSelected: true,
+                            isClosed: targetStroke.isClosed || closesTargetStroke
+                        };
                         mergedStrokeId = mergedStroke.id;
                         updatedStrokes = updatedStrokes.map(s => s.id === targetStroke!.id ? mergedStroke : s);
                     } else {

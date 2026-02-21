@@ -91,6 +91,8 @@ export const postProcessTransformedStrokes = (
 
         const aEnd = mergedStroke.points[mergedStroke.points.length - 1];
         const bStart = b.points[0];
+        const bEnd = b.points[b.points.length - 1];
+        const aStart = mergedStroke.points[0];
 
         if (distance(aEnd, bStart) <= options.closeThreshold) {
           const joinIndex = Math.max(1, mergedStroke.points.length - 1);
@@ -107,9 +109,18 @@ export const postProcessTransformedStrokes = (
             adaptJointToBezier(mergedPoints, joinIndex);
           }
 
+          let nextIsClosed = !!mergedStroke.isClosed;
+          if (distance(aStart, bEnd) <= options.closeThreshold) {
+            nextIsClosed = true;
+            if (mergedPoints.length > 2 && distance(mergedPoints[0], mergedPoints[mergedPoints.length - 1]) <= options.closeThreshold) {
+              mergedPoints.pop();
+            }
+          }
+
           mergedStroke = {
             ...mergedStroke,
-            points: mergedPoints
+            points: mergedPoints,
+            isClosed: nextIsClosed
           };
           consumed.add(b.id);
         }
