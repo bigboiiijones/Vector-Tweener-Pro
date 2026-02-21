@@ -11,47 +11,57 @@ import { postProcessTransformedStrokes } from '../logic/transformPostprocess';
 
 
 
-const ADD_POINT_HANDLE_FACTOR = 0.25;
+const ADD_POINT_HANDLE_FACTOR = 0.42;
+const MIN_ADD_POINT_HANDLE = 10;
+const MAX_ADD_POINT_HANDLE = 90;
 
-const withAutoBezierForAddPoints = (points: Point[], sharpCorner: boolean = false): Point[] => {
-    if (points.length < 2) return points;
+const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+
+const withAutoBezierForAddPoints = (points: Point[], sharpPointIndices: Set<number>): Point[] => {
+    if (points.length < 2) return points.map(p => ({ x: p.x, y: p.y }));
 
     const shaped = points.map(p => ({ x: p.x, y: p.y }));
-    const lastIndex = shaped.length - 1;
 
-    if (lastIndex >= 1) {
-        const prev = shaped[lastIndex - 1];
-        const curr = shaped[lastIndex];
-        const segLen = distance(prev, curr);
+    for (let i = 0; i < shaped.length; i++) {
+        if (sharpPointIndices.has(i)) continue;
 
-        if (segLen > 0.001) {
-            const handleLen = Math.max(8, segLen * ADD_POINT_HANDLE_FACTOR);
-            const vx = (curr.x - prev.x) / segLen;
-            const vy = (curr.y - prev.y) / segLen;
+        const point = shaped[i];
+        const prev = i > 0 ? shaped[i - 1] : undefined;
+        const next = i < shaped.length - 1 ? shaped[i + 1] : undefined;
 
-            if (!sharpCorner) {
-                prev.cp2 = { x: prev.x + vx * handleLen, y: prev.y + vy * handleLen };
-                curr.cp1 = { x: curr.x - vx * handleLen, y: curr.y - vy * handleLen };
-            } else {
-                prev.cp2 = undefined;
-                curr.cp1 = undefined;
-            }
+        if (prev && next) {
+            const vx = next.x - prev.x;
+            const vy = next.y - prev.y;
+            const vLen = Math.hypot(vx, vy);
+            if (vLen < 0.001) continue;
+
+            const nx = vx / vLen;
+            const ny = vy / vLen;
+            const inLen = clamp(distance(point, prev) * ADD_POINT_HANDLE_FACTOR, MIN_ADD_POINT_HANDLE, MAX_ADD_POINT_HANDLE);
+            const outLen = clamp(distance(point, next) * ADD_POINT_HANDLE_FACTOR, MIN_ADD_POINT_HANDLE, MAX_ADD_POINT_HANDLE);
+
+            point.cp1 = { x: point.x - nx * inLen, y: point.y - ny * inLen };
+            point.cp2 = { x: point.x + nx * outLen, y: point.y + ny * outLen };
+            continue;
         }
-    }
 
-    if (lastIndex >= 2) {
-        const a = shaped[lastIndex - 2];
-        const b = shaped[lastIndex - 1];
-        const c = shaped[lastIndex];
-        const ab = distance(a, b);
-        const bc = distance(b, c);
-        if (ab > 0.001 && bc > 0.001 && !sharpCorner) {
-            const vx = (c.x - a.x) / (ab + bc);
-            const vy = (c.y - a.y) / (ab + bc);
-            const inLen = Math.max(8, ab * ADD_POINT_HANDLE_FACTOR);
-            const outLen = Math.max(8, bc * ADD_POINT_HANDLE_FACTOR);
-            b.cp1 = { x: b.x - vx * inLen, y: b.y - vy * inLen };
-            b.cp2 = { x: b.x + vx * outLen, y: b.y + vy * outLen };
+        if (next) {
+            const segLen = distance(point, next);
+            if (segLen < 0.001) continue;
+            const nx = (next.x - point.x) / segLen;
+            const ny = (next.y - point.y) / segLen;
+            const outLen = clamp(segLen * ADD_POINT_HANDLE_FACTOR, MIN_ADD_POINT_HANDLE, MAX_ADD_POINT_HANDLE);
+            point.cp2 = { x: point.x + nx * outLen, y: point.y + ny * outLen };
+            continue;
+        }
+
+        if (prev) {
+            const segLen = distance(prev, point);
+            if (segLen < 0.001) continue;
+            const nx = (point.x - prev.x) / segLen;
+            const ny = (point.y - prev.y) / segLen;
+            const inLen = clamp(segLen * ADD_POINT_HANDLE_FACTOR, MIN_ADD_POINT_HANDLE, MAX_ADD_POINT_HANDLE);
+            point.cp1 = { x: point.x - nx * inLen, y: point.y - ny * inLen };
         }
     }
 
@@ -131,6 +141,7 @@ export const useCanvasInteraction = ({
     const isPanningRef = useRef(false);
     const lastPanPoint = useRef<{x: number, y: number} | null>(null);
     const addPointSharpCornerRef = useRef(false);
+    const addPointSharpIndicesRef = useRef<Set<number>>(new Set());
 
     // Transform Tool Hook
     const { 
@@ -161,6 +172,7 @@ export const useCanvasInteraction = ({
             setCurrentStroke(null);
             setIsDrawing(false);
             setDrawingSnapPoint(null);
+            addPointSharpIndicesRef.current.clear();
         }
     };
 
@@ -177,13 +189,18 @@ export const useCanvasInteraction = ({
                 addPointSharpCornerRef.current = false;
             }
         };
+        const onBlur = () => {
+            addPointSharpCornerRef.current = false;
+        };
 
         window.addEventListener('keydown', onKeyDown);
         window.addEventListener('keyup', onKeyUp);
+        window.addEventListener('blur', onBlur);
 
         return () => {
             window.removeEventListener('keydown', onKeyDown);
             window.removeEventListener('keyup', onKeyUp);
+            window.removeEventListener('blur', onBlur);
         };
     }, []);
 
@@ -193,6 +210,7 @@ export const useCanvasInteraction = ({
         setPendingPoints([]);
         setSelectionBox(null);
         setDrawingSnapPoint(null);
+        addPointSharpIndicesRef.current.clear();
         isDragRef.current = false;
         dragStart.current = null;
         onUpdateCameraTemp(null);
@@ -320,10 +338,15 @@ export const useCanvasInteraction = ({
                 setCurrentStroke(null);
                 setIsDrawing(false);
                 setDrawingSnapPoint(null);
+                addPointSharpIndicesRef.current.clear();
             } else {
                 if (currentTool === ToolType.ADD_POINTS) {
                     const sharpCorner = e.altKey || addPointSharpCornerRef.current;
-                    const nextPending = withAutoBezierForAddPoints([...pendingPoints, snappedPos], sharpCorner);
+                    const nextIndex = pendingPoints.length;
+                    if (sharpCorner) addPointSharpIndicesRef.current.add(nextIndex);
+                    else addPointSharpIndicesRef.current.delete(nextIndex);
+
+                    const nextPending = withAutoBezierForAddPoints([...pendingPoints, snappedPos], addPointSharpIndicesRef.current);
                     setPendingPoints(nextPending);
                     if (nextPending.length === 1) setCurrentStroke([snappedPos, snappedPos]);
                     else setCurrentStroke(nextPending);
@@ -443,7 +466,11 @@ export const useCanvasInteraction = ({
              if (pendingPoints.length > 0) {
                  if (currentTool === ToolType.ADD_POINTS) {
                      const sharpCorner = e.altKey || addPointSharpCornerRef.current;
-                     setCurrentStroke(withAutoBezierForAddPoints([...pendingPoints, snappedPos], sharpCorner));
+                     const previewSharpIndices = new Set(addPointSharpIndicesRef.current);
+                     const previewIndex = pendingPoints.length;
+                     if (sharpCorner) previewSharpIndices.add(previewIndex);
+                     else previewSharpIndices.delete(previewIndex);
+                     setCurrentStroke(withAutoBezierForAddPoints([...pendingPoints, snappedPos], previewSharpIndices));
                  } else {
                      // Polyline preview must show ALL points + current snap
                      setCurrentStroke([...pendingPoints, snappedPos]);
@@ -615,6 +642,7 @@ export const useCanvasInteraction = ({
             setIsDrawing(false);
             dragStart.current = null;
             setDrawingSnapPoint(null);
+            addPointSharpIndicesRef.current.clear();
         }
     };
 
