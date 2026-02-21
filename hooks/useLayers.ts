@@ -1,4 +1,3 @@
-
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Layer, LayerType } from '../types';
@@ -164,6 +163,11 @@ export const useLayers = () => {
         setLayers(prev => prev.map(l => l.id === id ? { ...l, isSynced: !l.isSynced } : l));
     }, []);
 
+    // Set all VECTOR layers to the same sync state at once
+    const setSyncAll = useCallback((synced: boolean) => {
+        setLayers(prev => prev.map(l => l.type === 'VECTOR' ? { ...l, isSynced: synced } : l));
+    }, []);
+
 
     const convertGroupToSwitch = useCallback((id: string) => {
         setLayers(prev => prev.map(l => {
@@ -249,6 +253,7 @@ export const useLayers = () => {
         toggleLock,
         toggleExpand,
         toggleSync,
+        setSyncAll,
         getVisibleLayerIds,
         getVectorDescendants,
         getSwitchActivationTarget
