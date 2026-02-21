@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { Point, ToolType, Keyframe, Stroke, ToolOptions, TransformMode, CameraTransform, ViewportTransform } from '../types';
 import { getMousePos } from '../utils/domUtils';
 import { distance, getRectPoints, getCirclePoints, getTrianglePoints, getStarPoints, getQuadraticBezierPoints, simplifyPath, createThreePointCubicStroke, createSmoothCubicStroke } from '../utils/mathUtils';
@@ -530,6 +530,52 @@ export const useCanvasInteraction = ({
         }
     };
 
+
+    const setTransformPointsSharp = useCallback(() => {
+        if (transformSelection.length === 0) return;
+        const selectionMap = new Map(transformSelection.map(sel => [sel.strokeId, sel.pointIndices]));
+        const updated = displayedStrokes.map(stroke => {
+            const indices = selectionMap.get(stroke.id);
+            if (!indices) return stroke;
+            const points = stroke.points.map((pt, idx) => indices.has(idx) ? { x: pt.x, y: pt.y } : pt);
+            return { ...stroke, points };
+        });
+        updateStrokes(updated);
+    }, [transformSelection, displayedStrokes, updateStrokes]);
+
+    const setTransformPointsCurve = useCallback(() => {
+        if (transformSelection.length === 0) return;
+        const selectionMap = new Map(transformSelection.map(sel => [sel.strokeId, sel.pointIndices]));
+        const updated = displayedStrokes.map(stroke => {
+            const indices = selectionMap.get(stroke.id);
+            if (!indices) return stroke;
+            const points = stroke.points.map((pt, idx, arr) => {
+                if (!indices.has(idx)) return pt;
+                const prev = arr[Math.max(0, idx - 1)];
+                const next = arr[Math.min(arr.length - 1, idx + 1)];
+                const vx = next.x - prev.x;
+                const vy = next.y - prev.y;
+                const len = Math.hypot(vx, vy);
+                if (len < 0.001) {
+                    return { ...pt, cp1: { x: pt.x - 20, y: pt.y }, cp2: { x: pt.x + 20, y: pt.y } };
+                }
+                const nx = vx / len;
+                const ny = vy / len;
+                const prevDist = Math.hypot(pt.x - prev.x, pt.y - prev.y);
+                const nextDist = Math.hypot(next.x - pt.x, next.y - pt.y);
+                const handleLen = Math.max(8, Math.min(50, Math.min(prevDist, nextDist) * 0.35));
+                return {
+                    ...pt,
+                    cp1: { x: pt.x - nx * handleLen, y: pt.y - ny * handleLen },
+                    cp2: { x: pt.x + nx * handleLen, y: pt.y + ny * handleLen }
+                };
+            });
+            return { ...stroke, points };
+        });
+        updateStrokes(updated);
+    }, [transformSelection, displayedStrokes, updateStrokes]);
+
+
     return {
         handlePointerDown,
         handlePointerMove,
@@ -542,6 +588,8 @@ export const useCanvasInteraction = ({
         transformSelection,
         transformPreviews,
         snapPoint: drawingSnapPoint || snapIndicator, // Return active snap point from either drawing or transform
-        transformBounds: getSelectionBounds()
+        transformBounds: getSelectionBounds(),
+        setTransformPointsSharp,
+        setTransformPointsCurve
     };
 };

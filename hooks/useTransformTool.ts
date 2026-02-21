@@ -11,8 +11,8 @@ interface TransformSelection {
 
 type BoxHandleKind =
     | 'scale-nw' | 'scale-n' | 'scale-ne' | 'scale-e' | 'scale-se' | 'scale-s' | 'scale-sw' | 'scale-w'
-    | 'rotate-nw' | 'rotate-ne' | 'rotate-se' | 'rotate-sw'
-    | 'skew-n' | 'skew-e' | 'skew-s' | 'skew-w';
+    | 'rotate-ring'
+    | 'skew-n' | 'skew-ne' | 'skew-e' | 'skew-se' | 'skew-s' | 'skew-sw' | 'skew-w' | 'skew-nw';
 
 interface ActiveBoxHandle {
     kind: BoxHandleKind;
@@ -99,13 +99,13 @@ const getBoxHandles = (bounds: { x: number; y: number; w: number; h: number }, o
     ];
 
     const outerHandles: Array<{ kind: BoxHandleKind; point: Point }> = [
-        { kind: 'rotate-nw', point: { x: ox, y: oy } },
+        { kind: 'skew-nw', point: { x: ox, y: oy } },
         { kind: 'skew-n', point: { x: ocx, y: oy } },
-        { kind: 'rotate-ne', point: { x: ox + ow, y: oy } },
+        { kind: 'skew-ne', point: { x: ox + ow, y: oy } },
         { kind: 'skew-e', point: { x: ox + ow, y: ocy } },
-        { kind: 'rotate-se', point: { x: ox + ow, y: oy + oh } },
+        { kind: 'skew-se', point: { x: ox + ow, y: oy + oh } },
         { kind: 'skew-s', point: { x: ocx, y: oy + oh } },
-        { kind: 'rotate-sw', point: { x: ox, y: oy + oh } },
+        { kind: 'skew-sw', point: { x: ox, y: oy + oh } },
         { kind: 'skew-w', point: { x: ox, y: ocy } }
     ];
 
@@ -169,7 +169,11 @@ export const useTransformTool = (
         }
     };
 
-    const getSelectionBounds = useCallback(() => getBoundsFromSelection(selection, strokes, 10), [selection, strokes]);
+    const getSelectionBounds = useCallback(() => {
+        const totalPoints = selection.reduce((acc, s) => acc + s.pointIndices.size, 0);
+        if (totalPoints < 2) return null;
+        return getBoundsFromSelection(selection, strokes, 10);
+    }, [selection, strokes]);
 
     const expandLinkedFillSelection = (baseSelection: TransformSelection[]) => {
         if (!bindLinkedFillsOnTransform) return baseSelection;
@@ -240,13 +244,42 @@ export const useTransformTool = (
         }
 
         const rawBounds = getBoundsFromSelection(selection, strokes, 0);
-        if (!bestHit && rawBounds && selection.length > 0) {
+        const totalSelectedPoints = selection.reduce((acc, s) => acc + s.pointIndices.size, 0);
+        if (!bestHit && rawBounds && selection.length > 0 && totalSelectedPoints >= 2) {
             const handles = getBoxHandles(rawBounds, 26);
-            const hitRadius = 14;
-            const outerFirst = [...handles.outerHandles, ...handles.scaleHandles];
-            const hitHandle = outerFirst.find(h => distance(pos, h.point) <= hitRadius);
-            if (hitHandle) {
-                setActiveBoxHandle({ kind: hitHandle.kind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: hitHandle.point });
+            const scaleHit = handles.scaleHandles
+                .map(h => ({ h, d: distance(pos, h.point) }))
+                .filter(item => item.d <= 20)
+                .sort((a, b) => a.d - b.d)[0];
+            if (scaleHit) {
+                setActiveBoxHandle({ kind: scaleHit.h.kind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: scaleHit.h.point });
+                setDragStart(pos);
+                const selectedIds = new Set(selection.map(s => s.strokeId));
+                setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
+                return true;
+            }
+
+            const outerHit = handles.outerHandles
+                .map(h => ({ h, d: distance(pos, h.point) }))
+                .filter(item => item.d <= 18)
+                .sort((a, b) => a.d - b.d)[0];
+            if (outerHit) {
+                setActiveBoxHandle({ kind: outerHit.h.kind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: outerHit.h.point });
+                setDragStart(pos);
+                const selectedIds = new Set(selection.map(s => s.strokeId));
+                setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
+                return true;
+            }
+
+            const pointerInOuterBounds = pos.x >= handles.outer.x && pos.x <= handles.outer.x + handles.outer.w && pos.y >= handles.outer.y && pos.y <= handles.outer.y + handles.outer.h;
+            const pointerInInnerBounds = pos.x >= rawBounds.x && pos.x <= rawBounds.x + rawBounds.w && pos.y >= rawBounds.y && pos.y <= rawBounds.y + rawBounds.h;
+            if (pointerInOuterBounds && !pointerInInnerBounds) {
+                setActiveBoxHandle({
+                    kind: 'rotate-ring',
+                    bounds: rawBounds,
+                    outerBounds: handles.outer,
+                    handlePoint: { x: rawBounds.x + rawBounds.w / 2, y: rawBounds.y + rawBounds.h / 2 }
+                });
                 setDragStart(pos);
                 const selectedIds = new Set(selection.map(s => s.strokeId));
                 setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
@@ -437,12 +470,18 @@ export const useTransformTool = (
                         const movingStartY = activeBoxHandle.handlePoint.y;
                         const anchor = isCtrl ? activeBoxHandle.handlePoint : { x: oppositeX, y: oppositeY };
 
-                        let sx = (effectivePos.x - anchor.x) / Math.max(0.001, movingStartX - anchor.x);
-                        let sy = (effectivePos.y - anchor.y) / Math.max(0.001, movingStartY - anchor.y);
+                        const dx0 = movingStartX - anchor.x;
+                        const dy0 = movingStartY - anchor.y;
+                        const denomX = Math.abs(dx0) < 8 ? (dx0 < 0 ? -8 : 8) : dx0;
+                        const denomY = Math.abs(dy0) < 8 ? (dy0 < 0 ? -8 : 8) : dy0;
+                        let sx = (effectivePos.x - anchor.x) / denomX;
+                        let sy = (effectivePos.y - anchor.y) / denomY;
                         if (handle === 'n' || handle === 's') sx = 1;
                         if (handle === 'e' || handle === 'w') sy = 1;
                         if (!Number.isFinite(sx)) sx = 1;
                         if (!Number.isFinite(sy)) sy = 1;
+                        sx = Math.max(-8, Math.min(8, sx));
+                        sy = Math.max(-8, Math.min(8, sy));
                         if (!isAlt && (handle.includes('n') || handle.includes('s')) && (handle.includes('e') || handle.includes('w'))) {
                             const uni = Math.abs(Math.abs(sx) > Math.abs(sy) ? sx : sy);
                             sx = Math.sign(sx || 1) * uni;
@@ -452,7 +491,7 @@ export const useTransformTool = (
                         newP = scalePoint(p, anchor, sx, sy);
                         if (p.cp1) newP.cp1 = scalePoint(p.cp1, anchor, sx, sy);
                         if (p.cp2) newP.cp2 = scalePoint(p.cp2, anchor, sx, sy);
-                    } else if (activeBoxHandle.kind.startsWith('rotate-')) {
+                    } else if (activeBoxHandle.kind === 'rotate-ring') {
                         const center = isCtrl ? activeBoxHandle.handlePoint : (transformCenter || { x: cx, y: cy });
                         const a0 = Math.atan2(startPoint.y - center.y, startPoint.x - center.x);
                         const a1 = Math.atan2(effectivePos.y - center.y, effectivePos.x - center.x);
@@ -465,9 +504,12 @@ export const useTransformTool = (
                         const local = { x: p.x - origin.x, y: p.y - origin.y };
                         let skewX = 0;
                         let skewY = 0;
-                        if (activeBoxHandle.kind === 'skew-n' || activeBoxHandle.kind === 'skew-s') {
+                        if (activeBoxHandle.kind === 'skew-n' || activeBoxHandle.kind === 'skew-s' || activeBoxHandle.kind === 'skew-nw' || activeBoxHandle.kind === 'skew-ne' || activeBoxHandle.kind === 'skew-sw' || activeBoxHandle.kind === 'skew-se') {
                             skewX = (effectivePos.x - startPoint.x) / safeH;
                         } else {
+                            skewY = (effectivePos.y - startPoint.y) / safeW;
+                        }
+                        if (activeBoxHandle.kind === 'skew-nw' || activeBoxHandle.kind === 'skew-ne' || activeBoxHandle.kind === 'skew-sw' || activeBoxHandle.kind === 'skew-se') {
                             skewY = (effectivePos.y - startPoint.y) / safeW;
                         }
                         newP.x = origin.x + local.x + local.y * skewX;
