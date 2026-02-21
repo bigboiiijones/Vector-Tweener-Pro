@@ -4,7 +4,7 @@ import { Layer, LayerType } from '../types';
 
 export const useLayers = () => {
     const [layers, setLayers] = useState<Layer[]>([
-        { id: 'layer-1', name: 'Layer 1', type: 'VECTOR', parentId: null, isVisible: true, isLocked: false, isExpanded: true, isSynced: true, depth: 0 }
+        { id: 'layer-1', name: 'Layer 1', type: 'VECTOR', parentId: null, isVisible: true, isLocked: false, isExpanded: true, isSynced: false, depth: 0 }
     ]);
     const [activeLayerId, setActiveLayerId] = useState<string>('layer-1');
     const [selectedLayerIds, setSelectedLayerIds] = useState<Set<string>>(new Set(['layer-1']));
@@ -43,7 +43,7 @@ export const useLayers = () => {
                 isVisible: true,
                 isLocked: false,
                 isExpanded: true,
-                isSynced: true,
+                isSynced: false,
                 depth: 0
             };
             return [...prev, newLayer];
