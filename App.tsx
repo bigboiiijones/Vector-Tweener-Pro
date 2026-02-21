@@ -61,10 +61,11 @@ const App: React.FC = () => {
       overwriteTargets: false, 
       swapTargets: false,
       autoMatchStrategy: 'INDEX',
-      snappingEnabled: true,
+      snappingEnabled: false,
       crossLayerSnapping: false,
       crossLayerPainting: true,
       crossGroupPainting: true,
+      closeCreatesFill: true,
       smoothingFactor: 20,
       showBezierHandles: true,
       transformMode: TransformMode.TRANSLATE,
@@ -74,6 +75,7 @@ const App: React.FC = () => {
       defaultWidth: 2,
       defaultTaperStart: 0,
       defaultTaperEnd: 0,
+      autoClose: false,
       defaultFillColor: '#000000',
       drawStroke: true,
       drawFill: false,
@@ -106,7 +108,7 @@ const App: React.FC = () => {
       setToolOptions(prev => ({
           ...prev,
           transformMode: TransformMode.TRANSLATE,
-          snappingEnabled: [ToolType.CURVE, ToolType.PEN, ToolType.ADD_POINTS].includes(currentTool) ? true : prev.snappingEnabled
+          snappingEnabled: currentTool === ToolType.CURVE ? true : prev.snappingEnabled
       }));
   }, [currentTool]);
 
