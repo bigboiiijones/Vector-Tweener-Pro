@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { Keyframe, ProjectSettings, CameraKeyframe, Layer } from '../types';
@@ -83,7 +82,7 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
   const { menu: switchMenu, openMenu: openSwitchMenu, closeMenu: closeSwitchMenu } = useContextMenu<SwitchCellMenuPayload>();
 
   const getSwitchCandidates = (switchLayerId: string): Layer[] => {
-      return layers.filter(layer => layer.parentId === switchLayerId && (layer.type === 'VECTOR' || layer.type === 'GROUP'));
+      return layers.filter(layer => layer.parentId === switchLayerId && (layer.type === 'VECTOR' || layer.type === 'GROUP' || layer.type === 'SWITCH'));
   };
 
   const getFirstVectorDescendant = (layerId: string): string | null => {
@@ -342,7 +341,17 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
   return (
     <div 
         className="absolute bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-700 h-80 flex flex-col z-50 outline-none focus-within:ring-1 focus-within:ring-blue-500 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.3)]"
-        onMouseDown={() => { setActivePanel('TIMELINE'); closeSwitchMenu(); }}
+        onMouseDown={(e) => { 
+            setActivePanel('TIMELINE');
+            // Close the switch menu only if the mousedown target is NOT inside the switch menu.
+            // Using onMouseDown here (instead of onClick) is intentional for panel focus,
+            // but it would fire before menu button onClick events. We guard against this by
+            // checking if the click originated from the menu overlay itself.
+            const target = e.target as HTMLElement;
+            if (!target.closest('[data-switch-menu]')) {
+                closeSwitchMenu();
+            }
+        }}
         ref={containerRef}
         tabIndex={0} 
         onKeyDown={(e) => {
@@ -465,9 +474,11 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
                                 style={{ paddingLeft: `${layer.depth * 16 + 8}px` }}
                                 onClick={() => selectLayer(layer.id, false, false)}
                             >
-                                <div className="mr-2" onClick={(e) => { e.stopPropagation(); if(layer.type === 'GROUP') toggleExpand(layer.id); }}>
+                                <div className="mr-2" onClick={(e) => { e.stopPropagation(); if(layer.type === 'GROUP' || layer.type === 'SWITCH') toggleExpand(layer.id); }}>
                                     {layer.type === 'GROUP' 
                                         ? (layer.isExpanded ? <FolderOpen size={12} className="text-yellow-500"/> : <Folder size={12} className="text-yellow-500"/>)
+                                        : layer.type === 'SWITCH'
+                                        ? (layer.isExpanded ? <FolderOpen size={12} className="text-green-400"/> : <Folder size={12} className="text-green-400"/>)
                                         : <ImageIcon size={12} className="text-blue-400"/>
                                     }
                                 </div>
@@ -529,9 +540,13 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
                                             {kf && (
                                                 <div 
                                                     className={`absolute top-1.5 left-1.5 w-3 h-3 rounded-sm rotate-45 border border-black/50 shadow-sm z-10
-                                                        ${isSel ? 'bg-white scale-110 ring-1 ring-blue-500' : (kf.type === 'HOLD' ? 'bg-gray-500' : (kf.type === 'GENERATED' ? 'bg-purple-500' : 'bg-yellow-500'))}
+                                                        ${isSel ? 'bg-white scale-110 ring-1 ring-blue-500' : 
+                                                          layer.type === 'SWITCH' && kf.switchChildId ? 'bg-green-400' :
+                                                          (kf.type === 'HOLD' ? 'bg-gray-500' : (kf.type === 'GENERATED' ? 'bg-purple-500' : 'bg-yellow-500'))}
                                                     `}
-                                                    title={`Frame ${i+1}: ${kf.type}`}
+                                                    title={layer.type === 'SWITCH' && kf.switchChildId 
+                                                        ? `Frame ${i+1}: Switch → ${layers.find(l => l.id === kf.switchChildId)?.name ?? kf.switchChildId}`
+                                                        : `Frame ${i+1}: ${kf.type}`}
                                                 ></div>
                                             )}
                                         </div>
@@ -546,26 +561,44 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
 
         {switchMenu && (
             <div
-                className="fixed z-[130] min-w-[180px] bg-gray-800 border border-gray-600 rounded shadow-xl py-1"
+                data-switch-menu="true"
+                className="fixed z-[130] min-w-[200px] bg-gray-800 border border-gray-600 rounded shadow-xl py-1"
                 style={{ left: `${switchMenu.position.x}px`, top: `${switchMenu.position.y}px` }}
                 onClick={(e) => e.stopPropagation()}
             >
-                {getSwitchCandidates(switchMenu.payload.switchLayerId).map(candidate => (
-                    <button
-                        key={candidate.id}
-                        className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-blue-600"
-                        onClick={() => {
-                            onSetSwitchSelection(switchMenu.payload.switchLayerId, candidate.id, switchMenu.payload.frameIndex);
-                            const layerToActivate = candidate.type === 'VECTOR' ? candidate.id : getFirstVectorDescendant(candidate.id);
-                            if (layerToActivate) {
-                                selectLayer(layerToActivate, false, false);
-                            }
-                            closeSwitchMenu();
-                        }}
-                    >
-                        {candidate.name}
-                    </button>
-                ))}
+                <div className="px-3 py-1 text-[10px] text-gray-400 uppercase tracking-wider border-b border-gray-700 mb-1">
+                    Switch at Frame {switchMenu.payload.frameIndex + 1}
+                </div>
+                {getSwitchCandidates(switchMenu.payload.switchLayerId).length === 0 && (
+                    <div className="px-3 py-2 text-xs text-gray-500 italic">No child layers found</div>
+                )}
+                {getSwitchCandidates(switchMenu.payload.switchLayerId).map(candidate => {
+                    // Check if this candidate is the currently active one at this frame
+                    const activeChildId = keyframes
+                        .filter(k => k.layerId === switchMenu.payload.switchLayerId && typeof k.switchChildId === 'string' && k.index <= switchMenu.payload.frameIndex)
+                        .sort((a, b) => b.index - a.index)[0]?.switchChildId;
+                    const isActive = activeChildId === candidate.id;
+
+                    return (
+                        <button
+                            key={candidate.id}
+                            className={`w-full text-left px-3 py-2 text-xs hover:bg-blue-600 flex items-center gap-2
+                                ${isActive ? 'text-green-400 font-bold' : 'text-gray-200'}`}
+                            onClick={() => {
+                                onSetSwitchSelection(switchMenu.payload.switchLayerId, candidate.id, switchMenu.payload.frameIndex);
+                                const layerToActivate = candidate.type === 'VECTOR' ? candidate.id : getFirstVectorDescendant(candidate.id);
+                                if (layerToActivate) {
+                                    selectLayer(layerToActivate, false, false);
+                                }
+                                closeSwitchMenu();
+                            }}
+                        >
+                            {isActive && <span>▶</span>}
+                            {!isActive && <span className="w-[10px]"/>}
+                            {candidate.name}
+                        </button>
+                    );
+                })}
             </div>
         )}
 
