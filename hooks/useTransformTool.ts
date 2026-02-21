@@ -249,7 +249,7 @@ export const useTransformTool = (
             const handles = getBoxHandles(rawBounds, 26);
             const scaleHit = handles.scaleHandles
                 .map(h => ({ h, d: distance(pos, h.point) }))
-                .filter(item => item.d <= 20)
+                .filter(item => item.d <= 12)
                 .sort((a, b) => a.d - b.d)[0];
             if (scaleHit) {
                 setActiveBoxHandle({ kind: scaleHit.h.kind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: scaleHit.h.point });
@@ -261,7 +261,7 @@ export const useTransformTool = (
 
             const outerHit = handles.outerHandles
                 .map(h => ({ h, d: distance(pos, h.point) }))
-                .filter(item => item.d <= 16)
+                .filter(item => item.d <= 12)
                 .sort((a, b) => a.d - b.d)[0];
             if (outerHit) {
                 setActiveBoxHandle({ kind: outerHit.h.kind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: outerHit.h.point });
@@ -271,11 +271,12 @@ export const useTransformTool = (
                 return true;
             }
 
-            const edgeTol = 10;
-            const nearInnerTop = Math.abs(pos.y - rawBounds.y) <= edgeTol && pos.x >= rawBounds.x - edgeTol && pos.x <= rawBounds.x + rawBounds.w + edgeTol;
-            const nearInnerBottom = Math.abs(pos.y - (rawBounds.y + rawBounds.h)) <= edgeTol && pos.x >= rawBounds.x - edgeTol && pos.x <= rawBounds.x + rawBounds.w + edgeTol;
-            const nearInnerLeft = Math.abs(pos.x - rawBounds.x) <= edgeTol && pos.y >= rawBounds.y - edgeTol && pos.y <= rawBounds.y + rawBounds.h + edgeTol;
-            const nearInnerRight = Math.abs(pos.x - (rawBounds.x + rawBounds.w)) <= edgeTol && pos.y >= rawBounds.y - edgeTol && pos.y <= rawBounds.y + rawBounds.h + edgeTol;
+            const edgeTolX = Math.max(3, Math.min(8, rawBounds.w * 0.22));
+            const edgeTolY = Math.max(3, Math.min(8, rawBounds.h * 0.22));
+            const nearInnerTop = Math.abs(pos.y - rawBounds.y) <= edgeTolY && pos.x >= rawBounds.x - edgeTolX && pos.x <= rawBounds.x + rawBounds.w + edgeTolX;
+            const nearInnerBottom = Math.abs(pos.y - (rawBounds.y + rawBounds.h)) <= edgeTolY && pos.x >= rawBounds.x - edgeTolX && pos.x <= rawBounds.x + rawBounds.w + edgeTolX;
+            const nearInnerLeft = Math.abs(pos.x - rawBounds.x) <= edgeTolX && pos.y >= rawBounds.y - edgeTolY && pos.y <= rawBounds.y + rawBounds.h + edgeTolY;
+            const nearInnerRight = Math.abs(pos.x - (rawBounds.x + rawBounds.w)) <= edgeTolX && pos.y >= rawBounds.y - edgeTolY && pos.y <= rawBounds.y + rawBounds.h + edgeTolY;
 
             if (nearInnerTop || nearInnerBottom || nearInnerLeft || nearInnerRight) {
                 const edgeKind: BoxHandleKind = nearInnerTop ? 'scale-n' : nearInnerBottom ? 'scale-s' : nearInnerLeft ? 'scale-w' : 'scale-e';
