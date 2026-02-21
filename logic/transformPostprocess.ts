@@ -1,5 +1,6 @@
 import { Point, Stroke } from '../types';
 import { distance } from '../utils/mathUtils';
+import { mergeStrokePair } from './strokeMerge';
 
 export interface TransformPostProcessOptions {
   autoClose: boolean;
@@ -112,34 +113,35 @@ export const postProcessTransformedStrokes = (
       if (consumed.has(a.id)) continue;
 
       let mergedStroke = a;
+      let keepMerging = true;
 
-      for (let j = i + 1; j < next.length; j++) {
-        const b = next[j];
-        if (consumed.has(b.id)) continue;
+      while (keepMerging) {
+        keepMerging = false;
+        let bestIdx = -1;
+        let bestResult: ReturnType<typeof mergeStrokePair> | null = null;
 
-        const aEnd = mergedStroke.points[mergedStroke.points.length - 1];
-        const bStart = b.points[0];
+        for (let j = 0; j < next.length; j++) {
+          if (j === i) continue;
+          const b = next[j];
+          if (consumed.has(b.id) || b.id === mergedStroke.id) continue;
 
-        if (distance(aEnd, bStart) <= options.closeThreshold) {
-          const joinIndex = Math.max(1, mergedStroke.points.length - 1);
-          const mergedPoints = [...mergedStroke.points, ...b.points.slice(1)];
-          const incomingJoin = mergedStroke.points[mergedStroke.points.length - 1];
-          const outgoingJoin = b.points[0];
-          mergedPoints[joinIndex] = {
-            ...mergedPoints[joinIndex],
-            cp1: mergedPoints[joinIndex].cp1 || incomingJoin.cp1,
-            cp2: outgoingJoin.cp2 || mergedPoints[joinIndex].cp2
-          };
+          const candidate = mergeStrokePair(mergedStroke, b, options.closeThreshold);
+          if (!candidate) continue;
 
-          if (options.bezierAdaptive) {
-            adaptJointToBezier(mergedPoints, joinIndex);
+          if (!bestResult || candidate.gap < bestResult.gap) {
+            bestResult = candidate;
+            bestIdx = j;
           }
+        }
 
-          mergedStroke = {
-            ...mergedStroke,
-            points: mergedPoints
-          };
-          consumed.add(b.id);
+        if (bestResult && bestIdx !== -1) {
+          let mergedPoints = bestResult.points;
+          if (options.bezierAdaptive) {
+            adaptJointToBezier(mergedPoints, bestResult.joinIndex);
+          }
+          mergedStroke = { ...mergedStroke, points: mergedPoints };
+          consumed.add(next[bestIdx].id);
+          keepMerging = true;
         }
       }
 

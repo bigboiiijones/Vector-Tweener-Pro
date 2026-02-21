@@ -1,5 +1,6 @@
 import { Point, Stroke } from '../types';
 import { distance, sampleStroke } from '../utils/mathUtils';
+import { reverseStrokePoints } from './strokeMerge';
 
 export interface PaintHit {
   kind: 'STROKE' | 'LOOP';
@@ -21,14 +22,6 @@ const pointInPolygon = (point: Point, polygon: Point[]): boolean => {
     if (intersect) inside = !inside;
   }
   return inside;
-};
-
-const reverseStrokePoints = (points: Point[]): Point[] => {
-  return [...points].reverse().map((p) => ({
-    ...p,
-    cp1: p.cp2 ? { ...p.cp2 } : undefined,
-    cp2: p.cp1 ? { ...p.cp1 } : undefined
-  }));
 };
 
 const buildCandidateLoop = (pathA: Point[], pathB: Point[], threshold: number): Point[] | null => {
