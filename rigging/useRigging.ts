@@ -90,7 +90,7 @@ export const useRigging = () => {
     []
   );
 
-  // Select bones
+  // Select a single bone
   const selectBone = useCallback((boneId: string, multi = false) => {
     setSelectedBoneIds(prev => {
       if (multi) {
@@ -101,6 +101,20 @@ export const useRigging = () => {
       return new Set([boneId]);
     });
     setActiveBoneId(boneId);
+  }, []);
+
+  // Select multiple bones at once (from box-select). additive = shift key
+  const selectBones = useCallback((ids: string[], additive: boolean) => {
+    setSelectedBoneIds(prev => {
+      if (additive) {
+        const next = new Set(prev);
+        ids.forEach(id => next.add(id));
+        return next;
+      }
+      return new Set(ids);
+    });
+    if (ids.length > 0) setActiveBoneId(ids[ids.length - 1]);
+    else setActiveBoneId(null);
   }, []);
 
   const clearBoneSelection = useCallback(() => {
@@ -278,6 +292,7 @@ export const useRigging = () => {
     addBone,
     updateBoneTail,
     selectBone,
+    selectBones,
     clearBoneSelection,
     setBoneParent,
     bindPoint,
