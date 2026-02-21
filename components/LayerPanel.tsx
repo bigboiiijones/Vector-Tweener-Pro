@@ -7,6 +7,7 @@ interface LayerPanelProps {
     flattenedLayers: Layer[];
     selectedLayerIds: Set<string>;
     activeLayerId: string;
+    currentFrameIndex: number;
     onSelect: (id: string, ctrl: boolean, shift: boolean) => void;
     onToggleVis: (id: string) => void;
     onToggleLock: (id: string) => void;
@@ -17,12 +18,19 @@ interface LayerPanelProps {
     onDelete: () => void;
     onMoveLayer: (dragId: string, targetId: string, pos: 'top'|'bottom'|'inside') => void;
     onConvertGroupToSwitch: (id: string) => void;
+    onSetSwitchSelection: (switchLayerId: string, childLayerId: string, frameIndex: number) => void;
+}
+
+interface LayerContextPayload {
+    layer: Layer;
+    switchParent: Layer | null;
 }
 
 export const LayerPanel: React.FC<LayerPanelProps> = React.memo(({
     flattenedLayers,
     selectedLayerIds,
     activeLayerId,
+    currentFrameIndex,
     onSelect,
     onToggleVis,
     onToggleLock,
@@ -32,10 +40,11 @@ export const LayerPanel: React.FC<LayerPanelProps> = React.memo(({
     onAddSwitch,
     onDelete,
     onMoveLayer,
-    onConvertGroupToSwitch
+    onConvertGroupToSwitch,
+    onSetSwitchSelection
 }) => {
     const [dragOverInfo, setDragOverInfo] = useState<{ id: string, position: 'top'|'bottom'|'inside' } | null>(null);
-    const { menu, openMenu, closeMenu } = useContextMenu<Layer>();
+    const { menu, openMenu, closeMenu } = useContextMenu<LayerContextPayload>();
 
     const handleDragStart = (e: React.DragEvent, id: string) => {
         e.dataTransfer.setData('layerId', id);
@@ -78,6 +87,28 @@ export const LayerPanel: React.FC<LayerPanelProps> = React.memo(({
         setDragOverInfo(null);
     };
 
+    // Find the nearest SWITCH ancestor of a given layer
+    const findSwitchParent = (layer: Layer): Layer | null => {
+        if (!layer.parentId) return null;
+        const parent = flattenedLayers.find(l => l.id === layer.parentId);
+        if (!parent) return null;
+        if (parent.type === 'SWITCH') return parent;
+        return findSwitchParent(parent);
+    };
+
+    // Find the direct child of a switch that is an ancestor of (or equal to) the given layer
+    const findSwitchDirectChild = (layer: Layer, switchLayer: Layer): Layer | null => {
+        // Walk up from layer to find the direct child of switchLayer
+        let current: Layer | undefined = layer;
+        let prev: Layer | undefined = undefined;
+        while (current) {
+            if (current.parentId === switchLayer.id) return current;
+            prev = current;
+            current = flattenedLayers.find(l => l.id === current!.parentId);
+        }
+        return null;
+    };
+
     return (
         <div className="flex flex-col bg-gray-900 border-l border-gray-700 w-64 h-full pointer-events-auto select-none" onClick={closeMenu}>
             <div className="h-10 bg-gray-800 border-b border-gray-700 flex items-center justify-between px-2">
@@ -98,6 +129,7 @@ export const LayerPanel: React.FC<LayerPanelProps> = React.memo(({
                     const isActive = layer.id === activeLayerId;
                     const isDragOver = dragOverInfo?.id === layer.id;
                     const dropPos = isDragOver ? dragOverInfo?.position : null;
+                    const switchParent = findSwitchParent(layer);
 
                     return (
                         <div
@@ -108,8 +140,12 @@ export const LayerPanel: React.FC<LayerPanelProps> = React.memo(({
                             onDragLeave={handleDragLeave}
                             onDrop={(e) => handleDrop(e, layer.id)}
                             onContextMenu={(e) => {
+                                e.preventDefault();
                                 if (layer.type === 'GROUP') {
-                                    openMenu(e, layer);
+                                    openMenu(e, { layer, switchParent: null });
+                                } else if (switchParent) {
+                                    // Right-clicking a child (or descendant) of a switch layer
+                                    openMenu(e, { layer, switchParent });
                                 }
                             }}
                             className={`flex items-center h-8 border-b border-gray-800 text-sm cursor-pointer group relative
@@ -156,6 +192,9 @@ export const LayerPanel: React.FC<LayerPanelProps> = React.memo(({
                                 <span className={`truncate ${isActive ? 'text-white font-medium' : 'text-gray-300'}`}>
                                     {layer.name}
                                 </span>
+                                {switchParent && (
+                                    <span className="ml-1 text-[9px] text-green-500/60 font-mono">SW</span>
+                                )}
                             </div>
                         </div>
                     );
@@ -164,19 +203,54 @@ export const LayerPanel: React.FC<LayerPanelProps> = React.memo(({
 
             {menu && (
                 <div
-                    className="fixed z-[120] min-w-[180px] bg-gray-800 border border-gray-600 rounded shadow-xl py-1"
+                    className="fixed z-[120] min-w-[200px] bg-gray-800 border border-gray-600 rounded shadow-xl py-1"
                     style={{ left: `${menu.position.x}px`, top: `${menu.position.y}px` }}
                     onClick={(e) => e.stopPropagation()}
                 >
-                    <button
-                        className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-blue-600"
-                        onClick={() => {
-                            onConvertGroupToSwitch(menu.payload.id);
-                            closeMenu();
-                        }}
-                    >
-                        Convert Group to Switch Layer
-                    </button>
+                    {/* Group → Switch conversion */}
+                    {menu.payload.layer.type === 'GROUP' && !menu.payload.switchParent && (
+                        <button
+                            className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-blue-600"
+                            onClick={() => {
+                                onConvertGroupToSwitch(menu.payload.layer.id);
+                                closeMenu();
+                            }}
+                        >
+                            Convert Group to Switch Layer
+                        </button>
+                    )}
+
+                    {/* Switch child selection */}
+                    {menu.payload.switchParent && (
+                        <>
+                            <div className="px-3 py-1 text-[10px] text-gray-400 uppercase tracking-wider border-b border-gray-700 mb-1">
+                                Set Active at Frame {currentFrameIndex + 1}
+                            </div>
+                            {flattenedLayers
+                                .filter(l => l.parentId === menu.payload.switchParent!.id)
+                                .map(candidate => {
+                                    // The switchChildId we set should be the direct child of the switch layer
+                                    const directChild = findSwitchDirectChild(menu.payload.layer, menu.payload.switchParent!);
+                                    const isTargetChild = directChild?.id === candidate.id;
+                                    return (
+                                        <button
+                                            key={candidate.id}
+                                            className={`w-full text-left px-3 py-2 text-xs hover:bg-blue-600 flex items-center gap-2
+                                                ${isTargetChild ? 'text-green-400 font-bold' : 'text-gray-200'}`}
+                                            onClick={() => {
+                                                onSetSwitchSelection(menu.payload.switchParent!.id, candidate.id, currentFrameIndex);
+                                                onSelect(menu.payload.layer.id, false, false);
+                                                closeMenu();
+                                            }}
+                                        >
+                                            {isTargetChild && <span className="text-green-400">▶</span>}
+                                            {candidate.name}
+                                        </button>
+                                    );
+                                })
+                            }
+                        </>
+                    )}
                 </div>
             )}
         </div>
