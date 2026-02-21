@@ -96,6 +96,10 @@ export const useKeyframeSystem = (totalFrames: number) => {
         return undefined;
     }, [keyframes]);
 
+    const getSwitchSelectionAtFrame = useCallback((switchLayerId: string, frameIndex: number): string | undefined => {
+        return getActiveSwitchChildAtFrame(switchLayerId, frameIndex);
+    }, [getActiveSwitchChildAtFrame]);
+
     // Get Composite Frame Content (All Visible Layers)
     const getFrameContent = useCallback((
         currentFrameIndex: number,
@@ -916,6 +920,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
         cameraKeyframes,
         groupBindings,
         getFrameContent,
+        getSwitchSelectionAtFrame,
         getTweenContext,
         getCameraTransform,
         addKeyframe,

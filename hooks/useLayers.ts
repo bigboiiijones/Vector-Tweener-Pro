@@ -186,6 +186,32 @@ export const useLayers = () => {
         return descendants;
     }, [layers]);
 
+
+    const getSwitchActivationTarget = useCallback((layerId: string): { switchLayerId: string; childId: string } | null => {
+        const layerMap = new Map<string, Layer>();
+        layers.forEach(layer => layerMap.set(layer.id, layer));
+
+        let currentId: string | null = layerId;
+        while (currentId) {
+            const currentLayer = layerMap.get(currentId);
+            if (!currentLayer) return null;
+
+            const parentId = currentLayer.parentId;
+            if (!parentId) return null;
+
+            const parent = layerMap.get(parentId);
+            if (!parent) return null;
+
+            if (parent.type === 'SWITCH') {
+                return { switchLayerId: parent.id, childId: currentId };
+            }
+
+            currentId = parent.id;
+        }
+
+        return null;
+    }, [layers]);
+
     const getVisibleLayerIds = useCallback(() => {
         const visibleIds = new Set<string>();
         const layerMap = new Map<string, Layer>();
@@ -224,6 +250,7 @@ export const useLayers = () => {
         toggleExpand,
         toggleSync,
         getVisibleLayerIds,
-        getVectorDescendants
+        getVectorDescendants,
+        getSwitchActivationTarget
     };
 };

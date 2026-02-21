@@ -104,6 +104,23 @@ const App: React.FC = () => {
       keyframeSystem.ensureInitialKeyframes(layerSystem.layers);
   }, [layerSystem.layers, keyframeSystem.ensureInitialKeyframes]);
   
+
+  useEffect(() => {
+      const target = layerSystem.getSwitchActivationTarget(layerSystem.activeLayerId);
+      if (!target) return;
+
+      const currentSelection = keyframeSystem.getSwitchSelectionAtFrame(target.switchLayerId, currentFrameIndex);
+      if (currentSelection === target.childId) return;
+
+      keyframeSystem.setSwitchSelection(target.switchLayerId, target.childId, currentFrameIndex);
+  }, [
+      currentFrameIndex,
+      layerSystem.activeLayerId,
+      layerSystem.getSwitchActivationTarget,
+      keyframeSystem.getSwitchSelectionAtFrame,
+      keyframeSystem.setSwitchSelection
+  ]);
+
   // Get content for the composite view (all layers)
   const displayedStrokes = keyframeSystem.getFrameContent(currentFrameIndex, toolOptions.autoMatchStrategy, layerSystem.layers, layerSystem.activeLayerId);
   
