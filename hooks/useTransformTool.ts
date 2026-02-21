@@ -261,10 +261,50 @@ export const useTransformTool = (
 
             const outerHit = handles.outerHandles
                 .map(h => ({ h, d: distance(pos, h.point) }))
-                .filter(item => item.d <= 18)
+                .filter(item => item.d <= 12)
                 .sort((a, b) => a.d - b.d)[0];
             if (outerHit) {
                 setActiveBoxHandle({ kind: outerHit.h.kind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: outerHit.h.point });
+                setDragStart(pos);
+                const selectedIds = new Set(selection.map(s => s.strokeId));
+                setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
+                return true;
+            }
+
+            const edgeTol = 10;
+            const nearInnerTop = Math.abs(pos.y - rawBounds.y) <= edgeTol && pos.x >= rawBounds.x - edgeTol && pos.x <= rawBounds.x + rawBounds.w + edgeTol;
+            const nearInnerBottom = Math.abs(pos.y - (rawBounds.y + rawBounds.h)) <= edgeTol && pos.x >= rawBounds.x - edgeTol && pos.x <= rawBounds.x + rawBounds.w + edgeTol;
+            const nearInnerLeft = Math.abs(pos.x - rawBounds.x) <= edgeTol && pos.y >= rawBounds.y - edgeTol && pos.y <= rawBounds.y + rawBounds.h + edgeTol;
+            const nearInnerRight = Math.abs(pos.x - (rawBounds.x + rawBounds.w)) <= edgeTol && pos.y >= rawBounds.y - edgeTol && pos.y <= rawBounds.y + rawBounds.h + edgeTol;
+
+            if (nearInnerTop || nearInnerBottom || nearInnerLeft || nearInnerRight) {
+                const edgeKind: BoxHandleKind = nearInnerTop ? 'scale-n' : nearInnerBottom ? 'scale-s' : nearInnerLeft ? 'scale-w' : 'scale-e';
+                const edgePoint =
+                    edgeKind === 'scale-n' ? { x: rawBounds.x + rawBounds.w / 2, y: rawBounds.y } :
+                    edgeKind === 'scale-s' ? { x: rawBounds.x + rawBounds.w / 2, y: rawBounds.y + rawBounds.h } :
+                    edgeKind === 'scale-w' ? { x: rawBounds.x, y: rawBounds.y + rawBounds.h / 2 } :
+                    { x: rawBounds.x + rawBounds.w, y: rawBounds.y + rawBounds.h / 2 };
+                setActiveBoxHandle({ kind: edgeKind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: edgePoint });
+                setDragStart(pos);
+                const selectedIds = new Set(selection.map(s => s.strokeId));
+                setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
+                return true;
+            }
+
+            const o = handles.outer;
+            const nearOuterTop = Math.abs(pos.y - o.y) <= edgeTol && pos.x >= o.x - edgeTol && pos.x <= o.x + o.w + edgeTol;
+            const nearOuterBottom = Math.abs(pos.y - (o.y + o.h)) <= edgeTol && pos.x >= o.x - edgeTol && pos.x <= o.x + o.w + edgeTol;
+            const nearOuterLeft = Math.abs(pos.x - o.x) <= edgeTol && pos.y >= o.y - edgeTol && pos.y <= o.y + o.h + edgeTol;
+            const nearOuterRight = Math.abs(pos.x - (o.x + o.w)) <= edgeTol && pos.y >= o.y - edgeTol && pos.y <= o.y + o.h + edgeTol;
+
+            if (nearOuterTop || nearOuterBottom || nearOuterLeft || nearOuterRight) {
+                const edgeKind: BoxHandleKind = nearOuterTop ? 'skew-n' : nearOuterBottom ? 'skew-s' : nearOuterLeft ? 'skew-w' : 'skew-e';
+                const edgePoint =
+                    edgeKind === 'skew-n' ? { x: o.x + o.w / 2, y: o.y } :
+                    edgeKind === 'skew-s' ? { x: o.x + o.w / 2, y: o.y + o.h } :
+                    edgeKind === 'skew-w' ? { x: o.x, y: o.y + o.h / 2 } :
+                    { x: o.x + o.w, y: o.y + o.h / 2 };
+                setActiveBoxHandle({ kind: edgeKind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: edgePoint });
                 setDragStart(pos);
                 const selectedIds = new Set(selection.map(s => s.strokeId));
                 setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
