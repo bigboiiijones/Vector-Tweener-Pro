@@ -14,11 +14,10 @@ export const applyTweenedStrokeStyle = (source: Stroke, target: Stroke, t: numbe
   const sourceClosed = !!source.isClosed;
   const targetClosed = !!target.isClosed;
   const isClosed = sourceClosed || targetClosed;
-  const sourceHasFill = !!source.fillColor && source.fillColor !== 'transparent';
 
   return {
     color: tweenColor(source.color || '#000000', target.color || source.color || '#000000', t),
-    fillColor: isClosed && sourceHasFill
+    fillColor: isClosed
       ? tweenColor(source.fillColor || '#000000', target.fillColor || source.fillColor || '#000000', t)
       : undefined,
     width: sourceWidth + (targetWidth - sourceWidth) * t,
