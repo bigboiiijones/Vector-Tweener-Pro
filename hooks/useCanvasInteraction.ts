@@ -372,7 +372,7 @@ export const useCanvasInteraction = ({
         if (currentTool === ToolType.PEN) {
             setCurrentStroke([snappedPos]);
         } else if (currentTool === ToolType.POLYLINE || currentTool === ToolType.MOTION_PATH || currentTool === ToolType.ADD_POINTS) {
-            if (pendingPoints.length > 2 && distance(snappedPos, pendingPoints[0]) < 15) {
+            if (toolOptions.autoClose && pendingPoints.length > 2 && distance(snappedPos, pendingPoints[0]) < 15) {
                 // Close loop (if near start)
                 const finalPoints = [...pendingPoints, pendingPoints[0]];
                 const commitTool = currentTool === ToolType.ADD_POINTS ? ToolType.ADD_POINTS : currentTool;
@@ -640,38 +640,7 @@ export const useCanvasInteraction = ({
                     }
                 }
 
-                const simple = simplifyPath(finalStroke, 2); 
-                // Pass isClosed to commitStroke (need to update commitStroke signature or handle it inside)
-                // Actually commitStroke creates the Stroke object. We should pass options or modify it.
-                // commitStroke takes toolOptions. We can modify toolOptions temporarily or update commitStroke.
-                // Better: update commitStroke to accept partial stroke properties override.
-                
-                // For now, let's assume commitStroke uses toolOptions. 
-                // But isClosed is a property of the stroke, not just a tool option.
-                // The current commitStroke implementation creates a stroke with `isClosed: false` by default for PEN.
-                
-                // We need to update commitStroke to handle this.
-                // OR, we can just manually create the stroke object here if we want full control.
-                // But commitStroke handles logic for adding to keyframe.
-                
-                // Let's modify commitStroke in useKeyframeSystem to accept an override object.
-                // But I can't modify useKeyframeSystem right now easily without context switching.
-                
-                // Workaround: Pass a special "tool" type or modify the stroke after commit?
-                // No, commitStroke returns void.
-                
-                // Let's look at commitStroke in useKeyframeSystem.ts (I viewed it earlier).
-                // It takes (points, toolType, frameIndex, ...).
-                // It creates `const newStroke: Stroke = { ... isClosed: [RECT, CIRCLE...].includes(toolType) ... }`
-                
-                // I should update useKeyframeSystem.ts to accept `isClosed` as an optional argument or part of options.
-                
-                // For now, I will modify useCanvasInteraction to calculate `isClosed` and pass it if I can.
-                // If I can't change commitStroke signature easily, I will rely on a hack or update it.
-                
-                // Let's update commitStroke signature in the next step.
-                // For this step, I'll just put the logic here.
-                
+                const simple = simplifyPath(finalStroke, 2);
                 commitStroke(simple, ToolType.PEN, currentFrameIndex, [], toolOptions, activeLayerId, isClosed);
             }
             setCurrentStroke(null);
