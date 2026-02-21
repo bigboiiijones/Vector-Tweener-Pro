@@ -116,6 +116,15 @@ const App: React.FC = () => {
   useEffect(() => {
       keyframeSystem.ensureInitialKeyframes(layerSystem.layers);
   }, [layerSystem.layers, keyframeSystem.ensureInitialKeyframes]);
+
+  // ── Apply bone keyframe poses when frame changes ──────────────────────────────
+  // This drives the bone positions from the boneKeyframes tween system when scrubbing.
+  // Only active when rig mode is on and there are bone keyframes to apply.
+  useEffect(() => {
+    if (isRigMode && rigging.boneKeyframes.length > 0) {
+      rigging.applyBoneKeyframeAtFrame(currentFrameIndex);
+    }
+  }, [currentFrameIndex, isRigMode, rigging.boneKeyframes.length]);
   
 
   // NOTE: Switch layer selection is set explicitly via the Timeline right-click context menu
@@ -125,6 +134,13 @@ const App: React.FC = () => {
 
   // Get content for the composite view (all layers)
   const displayedStrokes = keyframeSystem.getFrameContent(currentFrameIndex, toolOptions.autoMatchStrategy, layerSystem.layers, layerSystem.activeLayerId);
+
+  // ── Bone deformation post-process ────────────────────────────────────────────
+  // When in rig mode and bound points exist, deform strokes by current bone poses.
+  // This works alongside (not replacing) the stroke tweening in tweening.ts.
+  const rigDeformedStrokes = isRigMode
+    ? rigging.getDeformedStrokes(displayedStrokes)
+    : displayedStrokes;
   
   // Get active context (for onionskins and tools working on active layer)
   const { prev: prevContext, next: nextContext } = keyframeSystem.getTweenContext(currentFrameIndex, layerSystem.activeLayerId);
@@ -271,28 +287,45 @@ const App: React.FC = () => {
   // Rig canvas interaction
   const rigInteraction = useRigCanvasInteraction({
     activeTool: activeRigTool,
+    rigMode: rigging.rigMode,
     activeSkeletonId: rigging.activeSkeletonId,
     skeletons: rigging.skeletons,
     activeBoneId: rigging.activeBoneId,
     pendingParentBoneId: rigging.pendingParentBoneId,
     svgRef,
     activeLayerId: layerSystem.activeLayerId,
+    currentFrameIndex,
     displayedStrokes,
     onAddBone: rigging.addBone,
     onSelectBones: rigging.selectBones,
     onClearBoneSelection: rigging.clearBoneSelection,
-    onMoveBone: rigging.moveBone,
-    onRotateBone: rigging.rotateBone,
+    onEditMoveBone: rigging.editMoveBone,
+    onEditRotateBone: rigging.editRotateBone,
+    onEditScaleBone: rigging.editScaleBone,
+    onAnimMoveBone: rigging.animMoveBone,
+    onAnimRotateBone: rigging.animRotateBone,
+    onAnimScaleBone: rigging.animScaleBone,
+    onDeleteSelectedBones: rigging.deleteSelectedBones,
     onSetPendingParent: rigging.setPendingParentBoneId,
     onSetBoneParent: rigging.setBoneParent,
     onBindLayer: rigging.bindLayer,
+    onRecordBoneKeyframe: rigging.recordBoneKeyframe,
+    keyAllChannels: rigging.keyAllChannels,
   });
 
-  // Bind selected points to active bone
+  // Flexi-bind: auto-weight all visible strokes by bone proximity
+  const handleFlexiBind = useCallback(() => {
+    rigging.applyFlexiBind(displayedStrokes, rigging.activeSkeletonId ?? undefined);
+  }, [rigging, displayedStrokes]);
+
+  // Bind selected points to active bone.
+  // Point binding overwrites layer binding for the ACTIVE layer (mutual exclusion).
   const handleBindSelectedPoints = useCallback(() => {
     if (!rigging.activeBoneId) return;
     rigInteraction.commitBindPoints(rigging.activeBoneId, rigging.bindPoint);
-  }, [rigging.activeBoneId, rigging.bindPoint, rigInteraction]);
+    // Point binding clears layer binding for the active layer
+    rigging.unbindLayer(layerSystem.activeLayerId);
+  }, [rigging, rigInteraction, layerSystem.activeLayerId]);
 
   const deleteSelected = useCallback(() => keyframeSystem.deleteSelected(currentFrameIndex, selection.selectedStrokeIds, layerSystem.activeLayerId), [currentFrameIndex, selection.selectedStrokeIds, keyframeSystem, layerSystem.activeLayerId]);
   const reverseSelected = useCallback(() => keyframeSystem.reverseSelected(currentFrameIndex, selection.selectedStrokeIds, layerSystem.activeLayerId), [currentFrameIndex, selection.selectedStrokeIds, keyframeSystem, layerSystem.activeLayerId]);
@@ -432,6 +465,11 @@ const App: React.FC = () => {
                   <RigToolbar
                     activeTool={activeRigTool}
                     setActiveTool={setActiveRigTool}
+                    rigMode={rigging.rigMode}
+                    setRigMode={rigging.setRigMode}
+                    inheritMode={rigging.inheritMode}
+                    setInheritMode={rigging.setInheritMode}
+                    flexiBindEnabled={rigging.flexiBindEnabled}
                     onCreateSkeleton={() => rigging.createSkeleton(layerSystem.activeLayerId)}
                     hasActiveSkeleton={!!rigging.activeSkeletonId}
                     activeLayerName={layerSystem.layers.find(l => l.id === layerSystem.activeLayerId)?.name ?? 'Layer'}
@@ -440,6 +478,9 @@ const App: React.FC = () => {
                     selectedBindPointCount={rigInteraction.pendingSelectedPoints.size}
                     onBindSelectedPoints={handleBindSelectedPoints}
                     onBindLayer={rigInteraction.handleBindLayer}
+                    onFlexiBind={handleFlexiBind}
+                    onDeleteSelectedBones={rigging.deleteSelectedBones}
+                    onAddBoneKey={() => rigging.recordBoneKeyframe(currentFrameIndex)}
                   />
                 </div>
 
@@ -450,6 +491,7 @@ const App: React.FC = () => {
                     onRename={rigging.renameBone}
                     onColorChange={rigging.setBoneColor}
                     onStrengthChange={rigging.setBoneStrength}
+                    onFlexiRadiusChange={rigging.setBoneFlexiRadius}
                     onDelete={rigging.deleteSelectedBones}
                   />
                 </div>
@@ -489,6 +531,9 @@ const App: React.FC = () => {
                   onSelectSkeleton={rigging.setActiveSkeletonId}
                   onSelectBone={rigging.selectBone}
                   onUnbindLayer={rigging.unbindLayer}
+                  onRenameSkeleton={rigging.renameSkeleton}
+                  onRenameBone={rigging.renameBone}
+                  onSetBoneParent={rigging.setBoneParent}
                   isVisible={rigPanelVisible}
                   onToggle={() => setRigPanelVisible(v => !v)}
                 />
@@ -506,7 +551,7 @@ const App: React.FC = () => {
             <CanvasView 
                 width={projectSettings.canvasSize.width}
                 height={projectSettings.canvasSize.height}
-                strokes={displayedStrokes}
+                strokes={rigDeformedStrokes}
                 guides={displayedGuides}
                 prevOnion={prevContext}
                 nextOnion={nextContext}
@@ -547,10 +592,11 @@ const App: React.FC = () => {
                       activeTool={activeRigTool}
                       viewport={viewport}
                       onBonePointerDown={rigInteraction.handleBonePointerDown as any}
+                      onBonePointerUp={rigInteraction.handleBonePointerUp as any}
                       boxSelectRect={rigInteraction.boxSelectRect}
                     />
                     <BindPointsOverlay
-                      strokes={displayedStrokes}
+                      strokes={rigDeformedStrokes}
                       boundPoints={rigging.boundPoints}
                       pendingSelectedPoints={rigInteraction.pendingSelectedPoints}
                       activeBoneId={rigging.activeBoneId}
@@ -622,6 +668,13 @@ const App: React.FC = () => {
         currentFrameIndex={currentFrameIndex}
         keyframes={keyframeSystem.keyframes}
         cameraKeyframes={keyframeSystem.cameraKeyframes}
+        boneKeyframes={rigging.boneKeyframes}
+        skeletons={rigging.skeletons}
+        isRigMode={isRigMode}
+        keyAllChannels={rigging.keyAllChannels}
+        onSetKeyAllChannels={rigging.setKeyAllChannels}
+        onAddBoneKeyframe={(channels) => rigging.recordBoneKeyframe(currentFrameIndex, channels)}
+        onDeleteBoneKeyframes={(indices, skeletonId, channels) => indices.forEach(i => rigging.deleteBoneKeyframe(i, skeletonId, channels))}
         layers={layerSystem.layers}
         activeLayerId={layerSystem.activeLayerId}
         onSeek={setCurrentFrameIndex}
