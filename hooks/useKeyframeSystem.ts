@@ -681,7 +681,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
                         const otherStart = other[0];
                         const otherEnd = other[other.length - 1];
 
-                        const candidates: Array<{ score: number; points: Point[]; joinIndex: number }> = [];
+                        const candidates: Array<{ score: number; points: Point[]; closed: boolean }> = [];
 
                         const append = (a: Point[], b: Point[], joinIdx: number, score: number) => {
                             const points = [...a, ...b.slice(1)];
@@ -695,7 +695,8 @@ export const useKeyframeSystem = (totalFrames: number) => {
                             if (options.bezierAdaptive) {
                                 adaptJointToBezier(points, joinIdx);
                             }
-                            candidates.push({ score, points, joinIndex: joinIdx });
+                            const closed = distance(points[0], points[points.length - 1]) < MERGE_THRESHOLD;
+                            candidates.push({ score, points, closed });
                         };
 
                         const dEndStart = distance(baseEnd, otherStart);
@@ -713,10 +714,13 @@ export const useKeyframeSystem = (totalFrames: number) => {
                         if (dStartStart < MERGE_THRESHOLD) append(revOtherForStart, base, Math.max(1, revOtherForStart.length - 1), dStartStart);
 
                         if (candidates.length === 0) return null;
-                        candidates.sort((a, b) => a.score - b.score);
+                        candidates.sort((a, b) => {
+                            if (a.closed !== b.closed) return a.closed ? -1 : 1;
+                            return a.score - b.score;
+                        });
 
                         let mergedPoints = candidates[0].points;
-                        let closed = distance(mergedPoints[0], mergedPoints[mergedPoints.length - 1]) < MERGE_THRESHOLD;
+                        let closed = candidates[0].closed;
                         if (closed && distance(mergedPoints[0], mergedPoints[mergedPoints.length - 1]) <= DUPLICATE_EPSILON) {
                             mergedPoints = mergedPoints.slice(0, -1);
                         }
