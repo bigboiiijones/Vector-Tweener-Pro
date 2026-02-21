@@ -2,7 +2,7 @@ import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { Keyframe, ProjectSettings, CameraKeyframe, Layer } from '../types';
 import { TimelineSettings } from './TimelineSettings';
-import { Trash2, Video, Folder, FolderOpen, Image as ImageIcon, Link2, Unlink, Plus } from 'lucide-react';
+import { Trash2, Video, Folder, FolderOpen, Image as ImageIcon, Link2, Unlink, Plus, GitMerge } from 'lucide-react';
 
 interface TimelineProps {
   totalFrames: number;
@@ -33,6 +33,7 @@ interface TimelineProps {
   setProjectSettings: (s: ProjectSettings) => void;
 
   toggleSync: (layerId: string) => void;
+  setSyncAll: (synced: boolean) => void;
   selectLayer: (id: string, ctrl: boolean, shift: boolean) => void;
   toggleExpand: (id: string) => void;
   onSetSwitchSelection: (switchLayerId: string, childLayerId: string, frameIndex: number) => void;
@@ -67,6 +68,7 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
   projectSettings,
   setProjectSettings,
   toggleSync,
+  setSyncAll,
   selectLayer,
   toggleExpand,
   onSetSwitchSelection
@@ -108,6 +110,10 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
       });
       return map;
   }, [keyframes]);
+
+  // Are all VECTOR layers currently synced? Used for the Sync All toggle button
+  const vectorLayers = useMemo(() => layers.filter(l => l.type === 'VECTOR'), [layers]);
+  const allSynced = useMemo(() => vectorLayers.length > 0 && vectorLayers.every(l => l.isSynced), [vectorLayers]);
 
   const getFlattenedLayers = (layerList: Layer[], depth = 0): Layer[] => {
       let result: Layer[] = [];
@@ -382,6 +388,20 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
                  </button>
                  <button onClick={addHoldFrame} className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-xs text-white rounded font-bold border border-gray-600">Hold</button>
                  <div className="w-px h-4 bg-gray-600 mx-1"></div>
+                 {/* Sync All / Unsync All toggle */}
+                 <button
+                     onClick={() => setSyncAll(!allSynced)}
+                     title={allSynced ? 'Unsync All Layers' : 'Sync All Layers'}
+                     className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-bold border transition-colors
+                         ${allSynced
+                             ? 'bg-green-900/50 border-green-700 text-green-300 hover:bg-green-900/80'
+                             : 'bg-gray-700 border-gray-600 text-gray-400 hover:bg-gray-600 hover:text-gray-200'
+                         }`}
+                 >
+                     <GitMerge size={12} />
+                     {allSynced ? 'Synced' : 'Sync All'}
+                 </button>
+                 <div className="w-px h-4 bg-gray-600 mx-1"></div>
                  <button onClick={handleDeleteSelected} className="px-2 py-1 bg-red-900/40 hover:bg-red-900/60 text-xs text-red-200 rounded border border-red-900/50" title="Delete Selected Frames">
                      <Trash2 size={14} />
                  </button>
@@ -396,8 +416,20 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
                 {/* RULER ROW (Sticky Top) */}
                 <div className="flex sticky top-0 z-40 bg-gray-800 h-6 border-b border-gray-600 shadow-sm">
                      {/* Top-Left Corner (Sticky Left + Top) */}
-                     <div className="sticky left-0 w-64 bg-gray-800 border-r border-gray-600 z-50 flex items-center px-2 text-[10px] text-gray-400 font-bold uppercase tracking-wider">
-                         Layers
+                     <div className="sticky left-0 w-64 bg-gray-800 border-r border-gray-600 z-50 flex items-center justify-between px-2">
+                         <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Layers</span>
+                         <button
+                             onClick={() => setSyncAll(!allSynced)}
+                             title={allSynced ? 'Unsync All Layers' : 'Sync All Layers'}
+                             className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold border transition-colors
+                                 ${allSynced
+                                     ? 'bg-green-900/50 border-green-700/60 text-green-400 hover:bg-green-900/80'
+                                     : 'bg-transparent border-gray-600 text-gray-500 hover:text-gray-300 hover:border-gray-400'
+                                 }`}
+                         >
+                             <GitMerge size={9} />
+                             {allSynced ? 'All' : 'Sync'}
+                         </button>
                      </div>
                      {/* Ruler Ticks */}
                      <div className="flex relative">
@@ -485,19 +517,24 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
                                 <span className="truncate flex-1 text-xs text-gray-300 select-none">{layer.name}</span>
                                 
                                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-800/80 rounded px-1">
-                                    {/* Sync Toggle */}
-                                    <div onClick={(e) => { e.stopPropagation(); toggleSync(layer.id); }} className={`p-1 rounded hover:bg-black/20 ${layer.isSynced ? 'text-green-400' : 'text-gray-600'}`} title="Sync Timeline Actions">
-                                        {layer.isSynced ? <Link2 size={12} /> : <Unlink size={12} />}
-                                    </div>
+                                    {/* Sync Toggle — only for VECTOR layers */}
+                                    {layer.type === 'VECTOR' && (
+                                        <div onClick={(e) => { e.stopPropagation(); toggleSync(layer.id); }} className={`p-1 rounded hover:bg-black/20 ${layer.isSynced ? 'text-green-400' : 'text-gray-600'}`} title="Sync Timeline Actions">
+                                            {layer.isSynced ? <Link2 size={12} /> : <Unlink size={12} />}
+                                        </div>
+                                    )}
                                     
-                                    {/* Add Keyframe to Layer */}
-                                    <button 
-                                        onClick={(e) => { e.stopPropagation(); addKeyframe(layer.id); }} 
-                                        className="p-1 rounded hover:bg-black/40 text-gray-400 hover:text-white" 
-                                        title="Add Keyframe"
-                                    >
-                                        <Plus size={10} />
-                                    </button>
+                                    {/* Add Keyframe — SWITCH layers only get a key if they have children */}
+                                    {layer.type !== 'GROUP' && (
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); addKeyframe(layer.id); }} 
+                                            className={`p-1 rounded hover:bg-black/40 hover:text-white
+                                                ${layer.type === 'SWITCH' ? 'text-green-600 hover:text-green-300' : 'text-gray-400'}`}
+                                            title={layer.type === 'SWITCH' ? 'Add Switch Key (holds active child)' : 'Add Keyframe'}
+                                        >
+                                            <Plus size={10} />
+                                        </button>
+                                    )}
 
                                     {/* Delete Selected Layer Keys */}
                                     <button 
@@ -541,11 +578,14 @@ export const Timeline: React.FC<TimelineProps> = React.memo(({
                                                 <div 
                                                     className={`absolute top-1.5 left-1.5 w-3 h-3 rounded-sm rotate-45 border border-black/50 shadow-sm z-10
                                                         ${isSel ? 'bg-white scale-110 ring-1 ring-blue-500' : 
-                                                          layer.type === 'SWITCH' && kf.switchChildId ? 'bg-green-400' :
-                                                          (kf.type === 'HOLD' ? 'bg-gray-500' : (kf.type === 'GENERATED' ? 'bg-purple-500' : 'bg-yellow-500'))}
+                                                          layer.type === 'SWITCH'
+                                                            ? (kf.switchChildId ? 'bg-green-400' : 'bg-green-900 border-green-700')
+                                                            : (kf.type === 'HOLD' ? 'bg-gray-500' : (kf.type === 'GENERATED' ? 'bg-purple-500' : 'bg-yellow-500'))}
                                                     `}
-                                                    title={layer.type === 'SWITCH' && kf.switchChildId 
-                                                        ? `Frame ${i+1}: Switch → ${layers.find(l => l.id === kf.switchChildId)?.name ?? kf.switchChildId}`
+                                                    title={layer.type === 'SWITCH'
+                                                        ? (kf.switchChildId
+                                                            ? `Frame ${i+1}: Switch → ${layers.find(l => l.id === kf.switchChildId)?.name ?? kf.switchChildId}`
+                                                            : `Frame ${i+1}: Switch (no child set — right-click to assign)`)
                                                         : `Frame ${i+1}: ${kf.type}`}
                                                 ></div>
                                             )}
