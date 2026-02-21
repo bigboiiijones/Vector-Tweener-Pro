@@ -1,4 +1,3 @@
-
 import { useState, useCallback, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Keyframe, GroupBinding, Stroke, Point, ToolType, EasingType, AutoMatchStrategy, ToolOptions, CameraKeyframe, CameraTransform, Layer } from '../types';
@@ -289,6 +288,46 @@ export const useKeyframeSystem = (totalFrames: number) => {
             let newKeyframes = [...prevList];
 
             const processLayer = (lid: string) => {
+                const targetLayer = layers.find(l => l.id === lid);
+
+                // --- SWITCH layer: create/update a switch keyframe preserving the active child ---
+                if (targetLayer?.type === 'SWITCH') {
+                    const existingIdx = newKeyframes.findIndex(k => k.layerId === lid && k.index === currentFrameIndex);
+                    if (existingIdx !== -1) {
+                        // Already exists — upgrade HOLD/GENERATED to KEY, leave switchChildId intact
+                        const existing = newKeyframes[existingIdx];
+                        if (existing.type === 'HOLD' || existing.type === 'GENERATED') {
+                            newKeyframes[existingIdx] = { ...existing, type: 'KEY', generatedStrategy: undefined };
+                        }
+                        return;
+                    }
+
+                    // Find the most recent switchChildId at or before this frame
+                    const prevSwitchKey = newKeyframes
+                        .filter(k => k.layerId === lid && typeof k.switchChildId === 'string' && k.index <= currentFrameIndex)
+                        .sort((a, b) => b.index - a.index)[0];
+
+                    // If no prior key has a switchChildId, fall back to the first direct child of this switch
+                    const resolvedChildId: string | undefined = prevSwitchKey?.switchChildId
+                        ?? layers.find(l => l.parentId === lid)?.id;
+
+                    // Only create the keyframe if we actually have a child to point to
+                    if (!resolvedChildId) return;
+
+                    newKeyframes.push({
+                        id: uuidv4(),
+                        layerId: lid,
+                        index: currentFrameIndex,
+                        type: 'KEY',
+                        strokes: [],
+                        motionPaths: [],
+                        easing: 'LINEAR',
+                        switchChildId: resolvedChildId
+                    });
+                    return;
+                }
+
+                // --- VECTOR layer: original logic ---
                 const existingIndex = newKeyframes.findIndex(k => k.layerId === lid && k.index === currentFrameIndex);
                 if (existingIndex !== -1) {
                      const existing = newKeyframes[existingIndex];
