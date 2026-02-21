@@ -644,7 +644,7 @@ export const useKeyframeSystem = (totalFrames: number) => {
             taperStart: options.defaultTaperStart,
             taperEnd: options.defaultTaperEnd,
             isClosed: isClosed || [ToolType.RECTANGLE, ToolType.CIRCLE, ToolType.TRIANGLE, ToolType.STAR].includes(tool),
-            fillColor: (options.drawFill || (isClosed && options.closeCreatesFill))
+            fillColor: options.drawFill
                 ? options.defaultFillColor
                 : undefined
         };

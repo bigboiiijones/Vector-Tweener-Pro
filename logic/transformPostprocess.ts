@@ -5,7 +5,7 @@ export interface TransformPostProcessOptions {
   autoClose: boolean;
   autoMerge: boolean;
   bezierAdaptive: boolean;
-  closeCreatesFill: boolean;
+  drawFill: boolean;
   fillColor: string;
   closeThreshold: number;
 }
@@ -87,7 +87,7 @@ const applyAutoClose = (strokes: Stroke[], options: TransformPostProcessOptions)
     return {
       ...stroke,
       isClosed: true,
-      fillColor: options.closeCreatesFill ? (stroke.fillColor || options.fillColor) : stroke.fillColor,
+      fillColor: options.drawFill ? (stroke.fillColor || options.fillColor) : stroke.fillColor,
       points: closedPoints
     };
   });

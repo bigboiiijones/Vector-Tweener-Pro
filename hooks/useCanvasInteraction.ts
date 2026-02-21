@@ -557,7 +557,7 @@ export const useCanvasInteraction = ({
                          autoClose: toolOptions.autoClose,
                          autoMerge: toolOptions.autoMerge,
                          bezierAdaptive: toolOptions.bezierAdaptive,
-                         closeCreatesFill: toolOptions.closeCreatesFill,
+                         drawFill: toolOptions.drawFill,
                          fillColor: toolOptions.defaultFillColor,
                          closeThreshold: Math.max(2, toolOptions.gapClosingDistance / Math.max(0.2, viewport.zoom))
                      });
