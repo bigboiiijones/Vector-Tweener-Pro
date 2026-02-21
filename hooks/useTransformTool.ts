@@ -261,7 +261,7 @@ export const useTransformTool = (
 
             const outerHit = handles.outerHandles
                 .map(h => ({ h, d: distance(pos, h.point) }))
-                .filter(item => item.d <= 12)
+                .filter(item => item.d <= 16)
                 .sort((a, b) => a.d - b.d)[0];
             if (outerHit) {
                 setActiveBoxHandle({ kind: outerHit.h.kind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: outerHit.h.point });
@@ -291,28 +291,15 @@ export const useTransformTool = (
                 return true;
             }
 
-            const o = handles.outer;
-            const nearOuterTop = Math.abs(pos.y - o.y) <= edgeTol && pos.x >= o.x - edgeTol && pos.x <= o.x + o.w + edgeTol;
-            const nearOuterBottom = Math.abs(pos.y - (o.y + o.h)) <= edgeTol && pos.x >= o.x - edgeTol && pos.x <= o.x + o.w + edgeTol;
-            const nearOuterLeft = Math.abs(pos.x - o.x) <= edgeTol && pos.y >= o.y - edgeTol && pos.y <= o.y + o.h + edgeTol;
-            const nearOuterRight = Math.abs(pos.x - (o.x + o.w)) <= edgeTol && pos.y >= o.y - edgeTol && pos.y <= o.y + o.h + edgeTol;
-
-            if (nearOuterTop || nearOuterBottom || nearOuterLeft || nearOuterRight) {
-                const edgeKind: BoxHandleKind = nearOuterTop ? 'skew-n' : nearOuterBottom ? 'skew-s' : nearOuterLeft ? 'skew-w' : 'skew-e';
-                const edgePoint =
-                    edgeKind === 'skew-n' ? { x: o.x + o.w / 2, y: o.y } :
-                    edgeKind === 'skew-s' ? { x: o.x + o.w / 2, y: o.y + o.h } :
-                    edgeKind === 'skew-w' ? { x: o.x, y: o.y + o.h / 2 } :
-                    { x: o.x + o.w, y: o.y + o.h / 2 };
-                setActiveBoxHandle({ kind: edgeKind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: edgePoint });
-                setDragStart(pos);
-                const selectedIds = new Set(selection.map(s => s.strokeId));
-                setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
-                return true;
-            }
-
-            const pointerInOuterBounds = pos.x >= handles.outer.x && pos.x <= handles.outer.x + handles.outer.w && pos.y >= handles.outer.y && pos.y <= handles.outer.y + handles.outer.h;
-            const pointerInInnerBounds = pos.x >= rawBounds.x && pos.x <= rawBounds.x + rawBounds.w && pos.y >= rawBounds.y && pos.y <= rawBounds.y + rawBounds.h;
+            const visualBounds = getBoundsFromSelection(selection, strokes, 10) || rawBounds;
+            const visualOuter = {
+                x: visualBounds.x - 26,
+                y: visualBounds.y - 26,
+                w: visualBounds.w + 52,
+                h: visualBounds.h + 52
+            };
+            const pointerInOuterBounds = pos.x >= visualOuter.x && pos.x <= visualOuter.x + visualOuter.w && pos.y >= visualOuter.y && pos.y <= visualOuter.y + visualOuter.h;
+            const pointerInInnerBounds = pos.x >= visualBounds.x && pos.x <= visualBounds.x + visualBounds.w && pos.y >= visualBounds.y && pos.y <= visualBounds.y + visualBounds.h;
             if (pointerInOuterBounds && !pointerInInnerBounds) {
                 setActiveBoxHandle({
                     kind: 'rotate-ring',
@@ -326,11 +313,15 @@ export const useTransformTool = (
                 return true;
             }
 
-            if (pos.x >= rawBounds.x && pos.x <= rawBounds.x + rawBounds.w && pos.y >= rawBounds.y && pos.y <= rawBounds.y + rawBounds.h) {
+            if (pointerInInnerBounds) {
                 setDragStart(pos);
                 const selectedIds = new Set(selection.map(s => s.strokeId));
                 setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
                 updateCentroid(selection, strokes);
+                return true;
+            }
+
+            if (pointerInOuterBounds) {
                 return true;
             }
         }
