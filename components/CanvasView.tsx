@@ -39,6 +39,7 @@ interface CanvasViewProps {
     cameraTransform: CameraTransform;
     viewport: ViewportTransform;
     toolOptions: any; // Add this prop
+    rigOverlay?: React.ReactNode; // Rig system overlay (bones, bind points)
 }
 
 // -- Sub-Component for Individual Stroke Rendering --
@@ -201,7 +202,8 @@ export const CanvasView: React.FC<CanvasViewProps> = React.memo(({
     projectSettings,
     cameraTransform,
     viewport,
-    toolOptions // Add this prop
+    toolOptions, // Add this prop
+    rigOverlay,
 }) => {
     
     // Filter visible strokes
@@ -489,6 +491,9 @@ export const CanvasView: React.FC<CanvasViewProps> = React.memo(({
                         strokeDasharray="4"
                     />
                 )}
+
+                {/* Rig System Overlay (bones, bind points) */}
+                {rigOverlay}
             </svg>
         </div>
     );
