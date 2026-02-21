@@ -12,7 +12,9 @@ import { postProcessTransformedStrokes } from '../logic/transformPostprocess';
 
 
 const ADD_POINT_HANDLE_FACTOR = 0.32;
+const ENDPOINT_HANDLE_FACTOR = 0.08;
 const MAX_ADD_POINT_HANDLE = 120;
+const MAX_ENDPOINT_HANDLE = 18;
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
@@ -74,16 +76,19 @@ const withAutoBezierForAddPoints = (
         const segLen = distance(a, b);
         if (segLen < 0.001) continue;
 
-        const handleLen = clamp(segLen * ADD_POINT_HANDLE_FACTOR, 0, MAX_ADD_POINT_HANDLE);
+        const fromEndpoint = !isClosed && (aIdx === 0 || aIdx === n - 1);
+        const toEndpoint = !isClosed && (bIdx === 0 || bIdx === n - 1);
+        const outHandleLen = clamp(segLen * (fromEndpoint ? ENDPOINT_HANDLE_FACTOR : ADD_POINT_HANDLE_FACTOR), 0, fromEndpoint ? MAX_ENDPOINT_HANDLE : MAX_ADD_POINT_HANDLE);
+        const inHandleLen = clamp(segLen * (toEndpoint ? ENDPOINT_HANDLE_FACTOR : ADD_POINT_HANDLE_FACTOR), 0, toEndpoint ? MAX_ENDPOINT_HANDLE : MAX_ADD_POINT_HANDLE);
 
         if (!sharpPointIndices.has(aIdx)) {
             const t = tangents[aIdx];
-            a.cp2 = { x: a.x + t.x * handleLen, y: a.y + t.y * handleLen };
+            a.cp2 = { x: a.x + t.x * outHandleLen, y: a.y + t.y * outHandleLen };
         }
 
         if (!sharpPointIndices.has(bIdx)) {
             const t = tangents[bIdx];
-            b.cp1 = { x: b.x - t.x * handleLen, y: b.y - t.y * handleLen };
+            b.cp1 = { x: b.x - t.x * inHandleLen, y: b.y - t.y * inHandleLen };
         }
     }
 
