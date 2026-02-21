@@ -247,11 +247,40 @@ export const useTransformTool = (
         const totalSelectedPoints = selection.reduce((acc, s) => acc + s.pointIndices.size, 0);
         if (!bestHit && rawBounds && selection.length > 0 && totalSelectedPoints >= 2) {
             const handles = getBoxHandles(rawBounds, 26);
-            const hitRadius = 14;
-            const outerFirst = [...handles.outerHandles, ...handles.scaleHandles];
-            const hitHandle = outerFirst.find(h => distance(pos, h.point) <= hitRadius);
-            if (hitHandle) {
-                setActiveBoxHandle({ kind: hitHandle.kind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: hitHandle.point });
+            const scaleHit = handles.scaleHandles
+                .map(h => ({ h, d: distance(pos, h.point) }))
+                .filter(item => item.d <= 16)
+                .sort((a, b) => a.d - b.d)[0];
+            if (scaleHit) {
+                setActiveBoxHandle({ kind: scaleHit.h.kind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: scaleHit.h.point });
+                setDragStart(pos);
+                const selectedIds = new Set(selection.map(s => s.strokeId));
+                setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
+                return true;
+            }
+
+            const outerHit = handles.outerHandles
+                .map(h => ({ h, d: distance(pos, h.point) }))
+                .filter(item => item.d <= 12)
+                .sort((a, b) => a.d - b.d)[0];
+            if (outerHit) {
+                setActiveBoxHandle({ kind: outerHit.h.kind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: outerHit.h.point });
+                setDragStart(pos);
+                const selectedIds = new Set(selection.map(s => s.strokeId));
+                setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
+                return true;
+            }
+
+            const isInsideOuter = pos.x >= handles.outer.x && pos.x <= handles.outer.x + handles.outer.w && pos.y >= handles.outer.y && pos.y <= handles.outer.y + handles.outer.h;
+            const isInsideInner = pos.x >= rawBounds.x && pos.x <= rawBounds.x + rawBounds.w && pos.y >= rawBounds.y && pos.y <= rawBounds.y + rawBounds.h;
+            const nearAnyHandle = [...handles.scaleHandles, ...handles.outerHandles].some(h => distance(pos, h.point) <= 18);
+            if (isInsideOuter && !isInsideInner && !nearAnyHandle) {
+                setActiveBoxHandle({
+                    kind: 'rotate-ring',
+                    bounds: rawBounds,
+                    outerBounds: handles.outer,
+                    handlePoint: { x: rawBounds.x + rawBounds.w / 2, y: rawBounds.y + rawBounds.h / 2 }
+                });
                 setDragStart(pos);
                 const selectedIds = new Set(selection.map(s => s.strokeId));
                 setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
@@ -463,6 +492,8 @@ export const useTransformTool = (
                         if (handle === 'e' || handle === 'w') sy = 1;
                         if (!Number.isFinite(sx)) sx = 1;
                         if (!Number.isFinite(sy)) sy = 1;
+                        sx = Math.max(-8, Math.min(8, sx));
+                        sy = Math.max(-8, Math.min(8, sy));
                         if (!isAlt && (handle.includes('n') || handle.includes('s')) && (handle.includes('e') || handle.includes('w'))) {
                             const uni = Math.abs(Math.abs(sx) > Math.abs(sy) ? sx : sy);
                             sx = Math.sign(sx || 1) * uni;
