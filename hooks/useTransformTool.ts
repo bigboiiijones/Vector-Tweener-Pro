@@ -271,25 +271,10 @@ export const useTransformTool = (
                 return true;
             }
 
-            const isInsideOuter = pos.x >= handles.outer.x && pos.x <= handles.outer.x + handles.outer.w && pos.y >= handles.outer.y && pos.y <= handles.outer.y + handles.outer.h;
-            const isInsideInner = pos.x >= rawBounds.x && pos.x <= rawBounds.x + rawBounds.w && pos.y >= rawBounds.y && pos.y <= rawBounds.y + rawBounds.h;
+            const pointerInOuterBounds = pos.x >= handles.outer.x && pos.x <= handles.outer.x + handles.outer.w && pos.y >= handles.outer.y && pos.y <= handles.outer.y + handles.outer.h;
+            const pointerInInnerBounds = pos.x >= rawBounds.x && pos.x <= rawBounds.x + rawBounds.w && pos.y >= rawBounds.y && pos.y <= rawBounds.y + rawBounds.h;
             const nearAnyHandle = [...handles.scaleHandles, ...handles.outerHandles].some(h => distance(pos, h.point) <= 18);
-            if (isInsideOuter && !isInsideInner && !nearAnyHandle) {
-                setActiveBoxHandle({
-                    kind: 'rotate-ring',
-                    bounds: rawBounds,
-                    outerBounds: handles.outer,
-                    handlePoint: { x: rawBounds.x + rawBounds.w / 2, y: rawBounds.y + rawBounds.h / 2 }
-                });
-                setDragStart(pos);
-                const selectedIds = new Set(selection.map(s => s.strokeId));
-                setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
-                return true;
-            }
-
-            const isInsideOuter = pos.x >= handles.outer.x && pos.x <= handles.outer.x + handles.outer.w && pos.y >= handles.outer.y && pos.y <= handles.outer.y + handles.outer.h;
-            const isInsideInner = pos.x >= rawBounds.x && pos.x <= rawBounds.x + rawBounds.w && pos.y >= rawBounds.y && pos.y <= rawBounds.y + rawBounds.h;
-            if (isInsideOuter && !isInsideInner) {
+            if (pointerInOuterBounds && !pointerInInnerBounds && !nearAnyHandle) {
                 setActiveBoxHandle({
                     kind: 'rotate-ring',
                     bounds: rawBounds,
