@@ -182,7 +182,15 @@ export const useTransformTool = (
     const getSelectionBounds = useCallback(() => {
         const totalPoints = selection.reduce((acc, s) => acc + s.pointIndices.size, 0);
         if (totalPoints < 2) return null;
-        return getBoundsFromSelection(selection, strokes, 10);
+        const raw = getBoundsFromSelection(selection, strokes, 10);
+        if (!raw) return null;
+        // Enforce the same minimum box the hit testing uses so circles are drawn where they're clickable
+        const MIN_INNER = 56;
+        const cx = raw.x + raw.w / 2;
+        const cy = raw.y + raw.h / 2;
+        const w = Math.max(MIN_INNER, raw.w);
+        const h = Math.max(MIN_INNER, raw.h);
+        return { x: cx - w / 2, y: cy - h / 2, w, h };
     }, [selection, strokes]);
 
     const expandLinkedFillSelection = (baseSelection: TransformSelection[]) => {
@@ -236,137 +244,128 @@ export const useTransformTool = (
         const POINT_RADIUS = 12;
         const HANDLE_RADIUS = 10;
 
-        for (const sel of selection) {
-            const stroke = strokes.find(s => s.id === sel.strokeId);
-            if (!stroke) continue;
-            for (const idx of sel.pointIndices) {
-                const pt = stroke.points[idx];
-                if (pt.cp1) {
-                    const d = distance(pos, pt.cp1);
-                    if (d < HANDLE_RADIUS) { bestHit = { strokeId: sel.strokeId, idx, dist: d, type: 'cp1' }; break; }
+        const rawBoundsEarly = getBoundsFromSelection(selection, strokes, 0);
+        const totalSelectedPointsEarly = selection.reduce((acc, s) => acc + s.pointIndices.size, 0);
+        // When a bounding box is active (2+ points selected), don't allow accidental
+        // cp handle or point re-selection — the box controls take full priority.
+        const boxIsActive = !!(rawBoundsEarly && selection.length > 0 && totalSelectedPointsEarly >= 2);
+
+        if (!boxIsActive) {
+            for (const sel of selection) {
+                const stroke = strokes.find(s => s.id === sel.strokeId);
+                if (!stroke) continue;
+                for (const idx of sel.pointIndices) {
+                    const pt = stroke.points[idx];
+                    if (pt.cp1) {
+                        const d = distance(pos, pt.cp1);
+                        if (d < HANDLE_RADIUS) { bestHit = { strokeId: sel.strokeId, idx, dist: d, type: 'cp1' }; break; }
+                    }
+                    if (pt.cp2) {
+                        const d = distance(pos, pt.cp2);
+                        if (d < HANDLE_RADIUS) { bestHit = { strokeId: sel.strokeId, idx, dist: d, type: 'cp2' }; break; }
+                    }
                 }
-                if (pt.cp2) {
-                    const d = distance(pos, pt.cp2);
-                    if (d < HANDLE_RADIUS) { bestHit = { strokeId: sel.strokeId, idx, dist: d, type: 'cp2' }; break; }
-                }
+                if (bestHit) break;
             }
-            if (bestHit) break;
         }
 
         const rawBounds = getBoundsFromSelection(selection, strokes, 0);
         const totalSelectedPoints = selection.reduce((acc, s) => acc + s.pointIndices.size, 0);
         if (!bestHit && rawBounds && selection.length > 0 && totalSelectedPoints >= 2) {
-            const handles = getBoxHandles(rawBounds, 26);
-            const scaleHit = handles.scaleHandles
-                .map(h => ({ h, d: distance(pos, h.point) }))
-                .filter(item => item.d <= 12)
-                .sort((a, b) => a.d - b.d)[0];
-            if (scaleHit) {
-                setActiveBoxHandle({ kind: scaleHit.h.kind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: scaleHit.h.point });
-                setDragStart(pos);
-                const selectedIds = new Set(selection.map(s => s.strokeId));
-                setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
-                return true;
-            }
+            // --- Math-guaranteed minimum box sizes ---
+            // Circle hit radius = 14px. For no two circles to overlap: gap ≥ 2×14 = 28px.
+            // Inner box adjacent circles (e.g. scale-n to scale-ne) are w/2 apart → min w = 56px.
+            // Inner-to-outer edge-midpoint gap = OUTER_PAD → min OUTER_PAD = 28px (use 30 for comfort).
+            // This guarantees every circle is always individually clickable.
+            const CIRCLE_R = 14;       // hit radius for all circles
+            const MIN_INNER = 56;      // minimum inner box dimension (2 × 2×CIRCLE_R)
+            const OUTER_PAD = 30;      // gap between inner and outer box (> 2×CIRCLE_R)
+            const CENTER_R = 18;       // center crosshair hit radius
 
-            const outerHit = handles.outerHandles
-                .map(h => ({ h, d: distance(pos, h.point) }))
-                .filter(item => item.d <= 12)
-                .sort((a, b) => a.d - b.d)[0];
-            if (outerHit) {
-                setActiveBoxHandle({ kind: outerHit.h.kind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: outerHit.h.point });
-                setDragStart(pos);
-                const selectedIds = new Set(selection.map(s => s.strokeId));
-                setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
-                return true;
-            }
-
-            const outerEdgeTol = 9;
-            const nearOuterTop = Math.abs(pos.y - handles.outer.y) <= outerEdgeTol && pos.x >= handles.outer.x && pos.x <= handles.outer.x + handles.outer.w;
-            const nearOuterBottom = Math.abs(pos.y - (handles.outer.y + handles.outer.h)) <= outerEdgeTol && pos.x >= handles.outer.x && pos.x <= handles.outer.x + handles.outer.w;
-            const nearOuterLeft = Math.abs(pos.x - handles.outer.x) <= outerEdgeTol && pos.y >= handles.outer.y && pos.y <= handles.outer.y + handles.outer.h;
-            const nearOuterRight = Math.abs(pos.x - (handles.outer.x + handles.outer.w)) <= outerEdgeTol && pos.y >= handles.outer.y && pos.y <= handles.outer.y + handles.outer.h;
-
-            if (nearOuterTop || nearOuterBottom || nearOuterLeft || nearOuterRight) {
-                const edgeKind: BoxHandleKind = nearOuterTop ? 'skew-n' : nearOuterBottom ? 'skew-s' : nearOuterLeft ? 'skew-w' : 'skew-e';
-                const edgePoint =
-                    edgeKind === 'skew-n' ? { x: handles.outer.x + handles.outer.w / 2, y: handles.outer.y } :
-                    edgeKind === 'skew-s' ? { x: handles.outer.x + handles.outer.w / 2, y: handles.outer.y + handles.outer.h } :
-                    edgeKind === 'skew-w' ? { x: handles.outer.x, y: handles.outer.y + handles.outer.h / 2 } :
-                    { x: handles.outer.x + handles.outer.w, y: handles.outer.y + handles.outer.h / 2 };
-                setActiveBoxHandle({ kind: edgeKind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: edgePoint });
-                setDragStart(pos);
-                const selectedIds = new Set(selection.map(s => s.strokeId));
-                setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
-                return true;
-            }
-
-            const edgeTolX = Math.max(3, Math.min(8, rawBounds.w * 0.22));
-            const edgeTolY = Math.max(3, Math.min(8, rawBounds.h * 0.22));
-            const nearInnerTop = Math.abs(pos.y - rawBounds.y) <= edgeTolY && pos.x >= rawBounds.x - edgeTolX && pos.x <= rawBounds.x + rawBounds.w + edgeTolX;
-            const nearInnerBottom = Math.abs(pos.y - (rawBounds.y + rawBounds.h)) <= edgeTolY && pos.x >= rawBounds.x - edgeTolX && pos.x <= rawBounds.x + rawBounds.w + edgeTolX;
-            const nearInnerLeft = Math.abs(pos.x - rawBounds.x) <= edgeTolX && pos.y >= rawBounds.y - edgeTolY && pos.y <= rawBounds.y + rawBounds.h + edgeTolY;
-            const nearInnerRight = Math.abs(pos.x - (rawBounds.x + rawBounds.w)) <= edgeTolX && pos.y >= rawBounds.y - edgeTolY && pos.y <= rawBounds.y + rawBounds.h + edgeTolY;
-
-            if (nearInnerTop || nearInnerBottom || nearInnerLeft || nearInnerRight) {
-                const edgeKind: BoxHandleKind = nearInnerTop ? 'scale-n' : nearInnerBottom ? 'scale-s' : nearInnerLeft ? 'scale-w' : 'scale-e';
-                const edgePoint =
-                    edgeKind === 'scale-n' ? { x: rawBounds.x + rawBounds.w / 2, y: rawBounds.y } :
-                    edgeKind === 'scale-s' ? { x: rawBounds.x + rawBounds.w / 2, y: rawBounds.y + rawBounds.h } :
-                    edgeKind === 'scale-w' ? { x: rawBounds.x, y: rawBounds.y + rawBounds.h / 2 } :
-                    { x: rawBounds.x + rawBounds.w, y: rawBounds.y + rawBounds.h / 2 };
-                setActiveBoxHandle({ kind: edgeKind, bounds: rawBounds, outerBounds: handles.outer, handlePoint: edgePoint });
-                setDragStart(pos);
-                const selectedIds = new Set(selection.map(s => s.strokeId));
-                setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
-                return true;
-            }
-
-            const visualBounds = getBoundsFromSelection(selection, strokes, 10) || rawBounds;
-            const visualOuter = {
-                x: visualBounds.x - 26,
-                y: visualBounds.y - 26,
-                w: visualBounds.w + 52,
-                h: visualBounds.h + 52
+            // Enforce minimum inner box, centered on rawBounds center
+            const rawCx = rawBounds.x + rawBounds.w / 2;
+            const rawCy = rawBounds.y + rawBounds.h / 2;
+            const innerW = Math.max(MIN_INNER, rawBounds.w);
+            const innerH = Math.max(MIN_INNER, rawBounds.h);
+            const innerBounds = {
+                x: rawCx - innerW / 2,
+                y: rawCy - innerH / 2,
+                w: innerW,
+                h: innerH
             };
-            const pointerInOuterBounds = pointInRect(pos, visualOuter);
-            const pointerInInnerBounds = pointInRect(pos, visualBounds);
-            if (pointerInOuterBounds && !pointerInInnerBounds) {
-                setActiveBoxHandle({
-                    kind: 'rotate-ring',
-                    bounds: rawBounds,
-                    outerBounds: handles.outer,
-                    handlePoint: { x: rawBounds.x + rawBounds.w / 2, y: rawBounds.y + rawBounds.h / 2 }
-                });
+
+            // Build ALL handles from the enforced innerBounds
+            const handles = getBoxHandles(innerBounds, OUTER_PAD);
+            const outerBox = handles.outer;
+
+            const commitHandle = (kind: BoxHandleKind, handlePoint: Point) => {
+                // Transform math still uses rawBounds so actual data isn't affected by visual expansion
+                setActiveBoxHandle({ kind, bounds: rawBounds, outerBounds: outerBox, handlePoint });
                 setDragStart(pos);
                 const selectedIds = new Set(selection.map(s => s.strokeId));
                 setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
-                return true;
-            }
+            };
 
-            if (pointerInInnerBounds) {
+            const commitMove = () => {
                 setDragStart(pos);
                 const selectedIds = new Set(selection.map(s => s.strokeId));
                 setInitialStrokesMap(deepCloneStrokes(strokes.filter(s => selectedIds.has(s.id))));
                 updateCentroid(selection, strokes);
+            };
+
+            // Priority 0: Center crosshair — always move, no exceptions
+            if (distance(pos, { x: rawCx, y: rawCy }) <= CENTER_R) {
+                commitMove();
                 return true;
             }
 
-            if (pointerInOuterBounds) {
+            // Priority 1: Scale circles (inner box corners + edge midpoints)
+            const scaleHit = handles.scaleHandles
+                .map(h => ({ h, d: distance(pos, h.point) }))
+                .filter(item => item.d <= CIRCLE_R)
+                .sort((a, b) => a.d - b.d)[0];
+
+            // Priority 2: Skew circles (outer box corners + edge midpoints)
+            const skewHit = handles.outerHandles
+                .map(h => ({ h, d: distance(pos, h.point) }))
+                .filter(item => item.d <= CIRCLE_R)
+                .sort((a, b) => a.d - b.d)[0];
+
+            if (scaleHit) {
+                commitHandle(scaleHit.h.kind, scaleHit.h.point);
+                return true;
+            }
+            if (skewHit) {
+                commitHandle(skewHit.h.kind, skewHit.h.point);
                 return true;
             }
 
-            const lockDismissBounds = expandRect(visualOuter, 42);
-            if (pointInRect(pos, lockDismissBounds)) {
+            // Priority 3: Move — inside inner box, no circle hit
+            if (pointInRect(pos, innerBounds)) {
+                commitMove();
                 return true;
             }
 
+            // Priority 4: Rotate — ring between inner and outer box, no circle hit
+            if (pointInRect(pos, outerBox)) {
+                commitHandle('rotate-ring', { x: rawCx, y: rawCy });
+                return true;
+            }
+
+            // Priority 5: Buffer — just outside outer box, absorbs near-misses
+            const bufferOuter = { x: outerBox.x - CIRCLE_R, y: outerBox.y - CIRCLE_R, w: outerBox.w + CIRCLE_R * 2, h: outerBox.h + CIRCLE_R * 2 };
+            if (pointInRect(pos, bufferOuter)) {
+                return true;
+            }
+
+            // Priority 6: Deselect — clearly outside
             if (!isShift) {
                 setSelection([]);
                 setCentroid(null);
                 setTransformCenter(null);
-                return true;
             }
+            setDragStart(null);
+            return false;
         }
 
         if (!bestHit) {
@@ -428,8 +427,10 @@ export const useTransformTool = (
             for (let i = selectableStrokes.length - 1; i >= 0; i--) {
                 const stroke = selectableStrokes[i];
                 if (!strokeBoundsHit(stroke, pos, 15)) continue;
-                const samples = sampleStroke(stroke, 8);
-                if (!samples.some(p => distance(p, pos) < 8)) continue;
+                // Use more samples per segment for accurate bezier hit detection
+                const samples = sampleStroke(stroke, 20);
+                const HIT_DIST = 10;
+                if (!samples.some(p => distance(p, pos) < HIT_DIST)) continue;
 
                 const allIndices = new Set<number>();
                 stroke.points.forEach((_, idx) => allIndices.add(idx));
@@ -538,11 +539,13 @@ export const useTransformTool = (
 
                     if (activeBoxHandle.kind.startsWith('scale-')) {
                         const handle = activeBoxHandle.kind.replace('scale-', '');
+                        const isCorner = (handle.includes('n') || handle.includes('s')) && (handle.includes('e') || handle.includes('w'));
                         const oppositeX = handle.includes('w') ? b.x + b.w : handle.includes('e') ? b.x : cx;
                         const oppositeY = handle.includes('n') ? b.y + b.h : handle.includes('s') ? b.y : cy;
                         const movingStartX = activeBoxHandle.handlePoint.x;
                         const movingStartY = activeBoxHandle.handlePoint.y;
-                        const anchor = isCtrl ? activeBoxHandle.handlePoint : { x: oppositeX, y: oppositeY };
+                        // Ctrl = scale from center, otherwise scale from opposite corner/edge
+                        const anchor = isCtrl ? { x: cx, y: cy } : { x: oppositeX, y: oppositeY };
 
                         const dx0 = movingStartX - anchor.x;
                         const dy0 = movingStartY - anchor.y;
@@ -550,23 +553,33 @@ export const useTransformTool = (
                         const denomY = Math.abs(dy0) < 8 ? (dy0 < 0 ? -8 : 8) : dy0;
                         let sx = (effectivePos.x - anchor.x) / denomX;
                         let sy = (effectivePos.y - anchor.y) / denomY;
+                        // Side handles: force axis lock
                         if (handle === 'n' || handle === 's') sx = 1;
                         if (handle === 'e' || handle === 'w') sy = 1;
                         if (!Number.isFinite(sx)) sx = 1;
                         if (!Number.isFinite(sy)) sy = 1;
                         sx = Math.max(-8, Math.min(8, sx));
                         sy = Math.max(-8, Math.min(8, sy));
-                        if (!isAlt && (handle.includes('n') || handle.includes('s')) && (handle.includes('e') || handle.includes('w'))) {
-                            const uni = Math.abs(Math.abs(sx) > Math.abs(sy) ? sx : sy);
+                        // Corners: uniform scale by default; Alt = free non-uniform scale
+                        if (isCorner && !isAlt) {
+                            const ratioX = Math.abs(effectivePos.x - anchor.x) / Math.max(1, Math.abs(denomX));
+                            const ratioY = Math.abs(effectivePos.y - anchor.y) / Math.max(1, Math.abs(denomY));
+                            const uni = ratioX >= ratioY ? Math.abs(sx) : Math.abs(sy);
                             sx = Math.sign(sx || 1) * uni;
                             sy = Math.sign(sy || 1) * uni;
                         }
 
-                        newP = scalePoint(p, anchor, sx, sy);
-                        if (p.cp1) newP.cp1 = scalePoint(p.cp1, anchor, sx, sy);
-                        if (p.cp2) newP.cp2 = scalePoint(p.cp2, anchor, sx, sy);
+                        // Inline scale with separate sx/sy (scalePoint only supports uniform scale)
+                        const applyScale = (pt: Point): Point => ({
+                            x: anchor.x + (pt.x - anchor.x) * sx,
+                            y: anchor.y + (pt.y - anchor.y) * sy
+                        });
+                        newP = { ...p, ...applyScale(p) };
+                        if (p.cp1) newP.cp1 = applyScale(p.cp1);
+                        if (p.cp2) newP.cp2 = applyScale(p.cp2);
                     } else if (activeBoxHandle.kind === 'rotate-ring') {
-                        const center = isCtrl ? activeBoxHandle.handlePoint : (transformCenter || { x: cx, y: cy });
+                        // Default: rotate around bounding box center. Ctrl: rotate around drag start point.
+                        const center = isCtrl ? dragStart : (transformCenter || { x: cx, y: cy });
                         const a0 = Math.atan2(startPoint.y - center.y, startPoint.x - center.x);
                         const a1 = Math.atan2(effectivePos.y - center.y, effectivePos.x - center.x);
                         const angle = ((a1 - a0) * 180) / Math.PI;
