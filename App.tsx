@@ -482,6 +482,7 @@ const App: React.FC = () => {
         projectSettings={projectSettings}
         setProjectSettings={setProjectSettings}
         toggleSync={layerSystem.toggleSync}
+        setSyncAll={layerSystem.setSyncAll}
         selectLayer={layerSystem.selectLayer}
         toggleExpand={layerSystem.toggleExpand}
         onSetSwitchSelection={keyframeSystem.setSwitchSelection}
