@@ -11,61 +11,89 @@ import { postProcessTransformedStrokes } from '../logic/transformPostprocess';
 
 
 
-const ADD_POINT_HANDLE_FACTOR = 0.42;
-const MIN_ADD_POINT_HANDLE = 10;
-const MAX_ADD_POINT_HANDLE = 90;
+const ADD_POINT_HANDLE_FACTOR = 0.46;
+const MIN_ADD_POINT_HANDLE = 8;
+const MAX_ADD_POINT_HANDLE = 120;
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
-const withAutoBezierForAddPoints = (points: Point[], sharpPointIndices: Set<number>): Point[] => {
+const withAutoBezierForAddPoints = (
+    points: Point[],
+    sharpPointIndices: Set<number>,
+    closedHint: boolean = false
+): Point[] => {
     if (points.length < 2) return points.map(p => ({ x: p.x, y: p.y }));
 
-    const shaped = points.map(p => ({ x: p.x, y: p.y }));
+    const isClosed = closedHint || (points.length > 2 && distance(points[0], points[points.length - 1]) < 2);
+    const hasDuplicatedClosure = isClosed && distance(points[0], points[points.length - 1]) < 2;
+    const core = hasDuplicatedClosure ? points.slice(0, -1) : points;
+    const shaped = core.map(p => ({ x: p.x, y: p.y }));
+
+    const getCoreIndex = (idx: number): number => {
+        if (isClosed) {
+            const n = shaped.length;
+            return ((idx % n) + n) % n;
+        }
+        return idx;
+    };
 
     for (let i = 0; i < shaped.length; i++) {
         if (sharpPointIndices.has(i)) continue;
 
         const point = shaped[i];
-        const prev = i > 0 ? shaped[i - 1] : undefined;
-        const next = i < shaped.length - 1 ? shaped[i + 1] : undefined;
+        const hasPrev = isClosed || i > 0;
+        const hasNext = isClosed || i < shaped.length - 1;
+        const prev = hasPrev ? shaped[getCoreIndex(i - 1)] : undefined;
+        const next = hasNext ? shaped[getCoreIndex(i + 1)] : undefined;
+
+        if (!prev && !next) continue;
 
         if (prev && next) {
             const vx = next.x - prev.x;
             const vy = next.y - prev.y;
             const vLen = Math.hypot(vx, vy);
-            if (vLen < 0.001) continue;
-
-            const nx = vx / vLen;
-            const ny = vy / vLen;
-            const inLen = clamp(distance(point, prev) * ADD_POINT_HANDLE_FACTOR, MIN_ADD_POINT_HANDLE, MAX_ADD_POINT_HANDLE);
-            const outLen = clamp(distance(point, next) * ADD_POINT_HANDLE_FACTOR, MIN_ADD_POINT_HANDLE, MAX_ADD_POINT_HANDLE);
-
-            point.cp1 = { x: point.x - nx * inLen, y: point.y - ny * inLen };
-            point.cp2 = { x: point.x + nx * outLen, y: point.y + ny * outLen };
-            continue;
+            if (vLen > 0.001) {
+                const nx = vx / vLen;
+                const ny = vy / vLen;
+                const inLen = clamp(distance(point, prev) * ADD_POINT_HANDLE_FACTOR, MIN_ADD_POINT_HANDLE, MAX_ADD_POINT_HANDLE);
+                const outLen = clamp(distance(point, next) * ADD_POINT_HANDLE_FACTOR, MIN_ADD_POINT_HANDLE, MAX_ADD_POINT_HANDLE);
+                point.cp1 = { x: point.x - nx * inLen, y: point.y - ny * inLen };
+                point.cp2 = { x: point.x + nx * outLen, y: point.y + ny * outLen };
+                continue;
+            }
         }
 
         if (next) {
-            const segLen = distance(point, next);
-            if (segLen < 0.001) continue;
-            const nx = (next.x - point.x) / segLen;
-            const ny = (next.y - point.y) / segLen;
-            const outLen = clamp(segLen * ADD_POINT_HANDLE_FACTOR, MIN_ADD_POINT_HANDLE, MAX_ADD_POINT_HANDLE);
-            point.cp2 = { x: point.x + nx * outLen, y: point.y + ny * outLen };
-            continue;
+            const dirX = next.x - point.x;
+            const dirY = next.y - point.y;
+            const segLen = Math.hypot(dirX, dirY);
+            if (segLen > 0.001) {
+                const outLen = clamp(segLen * ADD_POINT_HANDLE_FACTOR, MIN_ADD_POINT_HANDLE, MAX_ADD_POINT_HANDLE);
+                point.cp2 = { x: point.x + (dirX / segLen) * outLen, y: point.y + (dirY / segLen) * outLen };
+            }
         }
 
         if (prev) {
-            const segLen = distance(prev, point);
-            if (segLen < 0.001) continue;
-            const nx = (point.x - prev.x) / segLen;
-            const ny = (point.y - prev.y) / segLen;
-            const inLen = clamp(segLen * ADD_POINT_HANDLE_FACTOR, MIN_ADD_POINT_HANDLE, MAX_ADD_POINT_HANDLE);
-            point.cp1 = { x: point.x - nx * inLen, y: point.y - ny * inLen };
+            const dirX = point.x - prev.x;
+            const dirY = point.y - prev.y;
+            const segLen = Math.hypot(dirX, dirY);
+            if (segLen > 0.001) {
+                const inLen = clamp(segLen * ADD_POINT_HANDLE_FACTOR, MIN_ADD_POINT_HANDLE, MAX_ADD_POINT_HANDLE);
+                point.cp1 = { x: point.x - (dirX / segLen) * inLen, y: point.y - (dirY / segLen) * inLen };
+            }
         }
     }
 
-    return shaped;
+    if (!isClosed) return shaped;
+
+    const first = shaped[0];
+    const closing: Point = {
+        x: first.x,
+        y: first.y,
+        cp1: first.cp1 ? { ...first.cp1 } : undefined
+    };
+
+    return [...shaped, closing];
 };
 
 interface InteractionProps {
@@ -333,7 +361,10 @@ export const useCanvasInteraction = ({
                 // Close loop (if near start)
                 const finalPoints = [...pendingPoints, pendingPoints[0]];
                 const commitTool = currentTool === ToolType.ADD_POINTS ? ToolType.ADD_POINTS : currentTool;
-                commitStroke(finalPoints, commitTool, currentFrameIndex, [], toolOptions, activeLayerId, true);
+                const pointsToCommit = currentTool === ToolType.ADD_POINTS
+                    ? withAutoBezierForAddPoints(finalPoints, addPointSharpIndicesRef.current, true)
+                    : finalPoints;
+                commitStroke(pointsToCommit, commitTool, currentFrameIndex, [], toolOptions, activeLayerId, true);
                 setPendingPoints([]);
                 setCurrentStroke(null);
                 setIsDrawing(false);
@@ -346,7 +377,7 @@ export const useCanvasInteraction = ({
                     if (sharpCorner) addPointSharpIndicesRef.current.add(nextIndex);
                     else addPointSharpIndicesRef.current.delete(nextIndex);
 
-                    const nextPending = withAutoBezierForAddPoints([...pendingPoints, snappedPos], addPointSharpIndicesRef.current);
+                    const nextPending = withAutoBezierForAddPoints([...pendingPoints, snappedPos], addPointSharpIndicesRef.current, false);
                     setPendingPoints(nextPending);
                     if (nextPending.length === 1) setCurrentStroke([snappedPos, snappedPos]);
                     else setCurrentStroke(nextPending);
@@ -470,7 +501,7 @@ export const useCanvasInteraction = ({
                      const previewIndex = pendingPoints.length;
                      if (sharpCorner) previewSharpIndices.add(previewIndex);
                      else previewSharpIndices.delete(previewIndex);
-                     setCurrentStroke(withAutoBezierForAddPoints([...pendingPoints, snappedPos], previewSharpIndices));
+                     setCurrentStroke(withAutoBezierForAddPoints([...pendingPoints, snappedPos], previewSharpIndices, false));
                  } else {
                      // Polyline preview must show ALL points + current snap
                      setCurrentStroke([...pendingPoints, snappedPos]);
