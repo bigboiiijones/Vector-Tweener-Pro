@@ -93,6 +93,95 @@ function propagateToDescendants(movedBoneId: string, bones: Bone[]): Bone[] {
   return result;
 }
 
+function transformPointByParentDelta(
+  point: { x: number; y: number },
+  oldParent: Bone,
+  newParent: Bone
+): { x: number; y: number } {
+  const oldDx = oldParent.tailX - oldParent.headX;
+  const oldDy = oldParent.tailY - oldParent.headY;
+  const newDx = newParent.tailX - newParent.headX;
+  const newDy = newParent.tailY - newParent.headY;
+  const oldLen = Math.sqrt(oldDx * oldDx + oldDy * oldDy);
+  const newLen = Math.sqrt(newDx * newDx + newDy * newDy);
+
+  // Degenerate fallback: just translate by parent head delta.
+  if (oldLen < 1e-6 || newLen < 1e-6) {
+    return {
+      x: point.x + (newParent.headX - oldParent.headX),
+      y: point.y + (newParent.headY - oldParent.headY),
+    };
+  }
+
+  const oldUx = oldDx / oldLen;
+  const oldUy = oldDy / oldLen;
+  const oldNx = -oldUy;
+  const oldNy = oldUx;
+
+  const relX = point.x - oldParent.tailX;
+  const relY = point.y - oldParent.tailY;
+  const along = relX * oldUx + relY * oldUy;
+  const perp = relX * oldNx + relY * oldNy;
+
+  const newUx = newDx / newLen;
+  const newUy = newDy / newLen;
+  const newNx = -newUy;
+  const newNy = newUx;
+  const lenScale = newLen / oldLen;
+
+  return {
+    x: newParent.tailX + (along * lenScale) * newUx + (perp * lenScale) * newNx,
+    y: newParent.tailY + (along * lenScale) * newUy + (perp * lenScale) * newNy,
+  };
+}
+
+function propagateEditToDescendants(movedBoneId: string, prevBones: Bone[], nextBones: Bone[]): Bone[] {
+  const result = [...nextBones];
+  const prevById = new Map(prevBones.map(b => [b.id, b]));
+  const queue = [movedBoneId];
+  const visited = new Set<string>([movedBoneId]);
+
+  while (queue.length > 0) {
+    const parentId = queue.shift()!;
+    const oldParent = prevById.get(parentId);
+    const newParent = result.find(b => b.id === parentId);
+    if (!oldParent || !newParent) continue;
+
+    for (let i = 0; i < result.length; i++) {
+      const child = result[i];
+      if (child.parentBoneId !== parentId || visited.has(child.id)) continue;
+      const oldChild = prevById.get(child.id);
+      if (!oldChild) continue;
+
+      const newHead = transformPointByParentDelta({ x: oldChild.headX, y: oldChild.headY }, oldParent, newParent);
+      const newTail = transformPointByParentDelta({ x: oldChild.tailX, y: oldChild.tailY }, oldParent, newParent);
+      const newAngle = angleBetween(newHead.x, newHead.y, newTail.x, newTail.y);
+      const newLength = Math.max(5, distance(newHead.x, newHead.y, newTail.x, newTail.y));
+
+      result[i] = {
+        ...child,
+        headX: newHead.x,
+        headY: newHead.y,
+        tailX: newHead.x + Math.cos(newAngle) * newLength,
+        tailY: newHead.y + Math.sin(newAngle) * newLength,
+        angle: newAngle,
+        length: newLength,
+        restHeadX: newHead.x,
+        restHeadY: newHead.y,
+        restTailX: newHead.x + Math.cos(newAngle) * newLength,
+        restTailY: newHead.y + Math.sin(newAngle) * newLength,
+        restAngle: newAngle,
+        restLength: newLength,
+      };
+
+      visited.add(child.id);
+      queue.push(child.id);
+    }
+  }
+
+  return result;
+}
+
 const DEFAULT_FLEXI_RADIUS = 120;
 
 // ─── Per-channel keyframe interpolation ──────────────────────────────────────
@@ -340,13 +429,18 @@ export const useRigging = () => {
   }, []);
 
   // ── Bone update helper: apply + propagate to descendants ─────────────────
-  const applyBoneUpdate = useCallback((boneId: string, updater: (b: Bone) => Bone, propagate: boolean) => {
+  const applyBoneUpdate = useCallback((boneId: string, updater: (b: Bone) => Bone, propagate: boolean, strategy: 'ANIMATE' | 'EDIT' = 'ANIMATE') => {
     setSkeletons(prev => prev.map(s => {
       const idx = s.bones.findIndex(b => b.id === boneId);
       if (idx === -1) return s;
-      let bones = [...s.bones];
+      const prevBones = s.bones;
+      let bones = [...prevBones];
       bones[idx] = updater(bones[idx]);
-      if (propagate) bones = propagateToDescendants(boneId, bones);
+      if (propagate) {
+        bones = strategy === 'EDIT'
+          ? propagateEditToDescendants(boneId, prevBones, bones)
+          : propagateToDescendants(boneId, bones);
+      }
       return { ...s, bones };
     }));
   }, []);
@@ -359,7 +453,7 @@ export const useRigging = () => {
       tailX: b.tailX + dx, tailY: b.tailY + dy,
       restHeadX: b.restHeadX + dx, restHeadY: b.restHeadY + dy,
       restTailX: b.restTailX + dx, restTailY: b.restTailY + dy,
-    }), inheritMode === 'INHERIT');
+    }), inheritMode === 'INHERIT', 'EDIT');
   }, [applyBoneUpdate, inheritMode]);
 
   const editRotateBone = useCallback((boneId: string, tailX: number, tailY: number) => {
@@ -369,7 +463,7 @@ export const useRigging = () => {
       const nTailX = b.headX + Math.cos(angle) * len;
       const nTailY = b.headY + Math.sin(angle) * len;
       return { ...b, angle, tailX: nTailX, tailY: nTailY, restAngle: angle, restTailX: nTailX, restTailY: nTailY };
-    }, inheritMode === 'INHERIT');
+    }, inheritMode === 'INHERIT', 'EDIT');
   }, [applyBoneUpdate, inheritMode]);
 
   const editScaleBone = useCallback((boneId: string, scaleFactor: number) => {
@@ -378,7 +472,7 @@ export const useRigging = () => {
       const nTailX  = b.headX + Math.cos(b.angle) * newLen;
       const nTailY  = b.headY + Math.sin(b.angle) * newLen;
       return { ...b, length: newLen, restLength: newLen, tailX: nTailX, tailY: nTailY, restTailX: nTailX, restTailY: nTailY };
-    }, inheritMode === 'INHERIT');
+    }, inheritMode === 'INHERIT', 'EDIT');
   }, [applyBoneUpdate, inheritMode]);
 
   // ── ANIMATE mode ops — live pose only ────────────────────────────────────
