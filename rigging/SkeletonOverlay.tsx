@@ -1,11 +1,12 @@
 import React from 'react';
-import { Skeleton, Bone, RigTool } from './riggingTypes';
+import { Skeleton, Bone, RigTool, RigMode } from './riggingTypes';
 
 interface SkeletonOverlayProps {
   skeletons: Skeleton[];
   activeSkeletonId: string | null;
   selectedBoneIds: Set<string>;
   activeTool: RigTool;
+  rigMode: RigMode;
   viewport: { x: number; y: number; zoom: number };
   onBonePointerDown: (e: React.PointerEvent, boneId: string, part: 'head' | 'tail' | 'body') => void;
   /** Called on pointer-up — used to commit animate-tool keyframes */
@@ -15,22 +16,22 @@ interface SkeletonOverlayProps {
 }
 
 const SELECTED_COLOR = '#facc15';
-const ANIMATE_TOOLS: RigTool[] = ['BONE_MOVE', 'BONE_ROTATE', 'BONE_SCALE'];
-
 function BoneShape({
   bone,
   isSelected,
   activeTool,
+  rigMode,
   onPointerDown,
   onPointerUp,
 }: {
   bone: Bone;
   isSelected: boolean;
   activeTool: RigTool;
+  rigMode: RigMode;
   onPointerDown: (e: React.PointerEvent, boneId: string, part: 'head' | 'tail' | 'body') => void;
   onPointerUp?: (e: React.PointerEvent, boneId: string) => void;
 }) {
-  const isAnimateTool = ANIMATE_TOOLS.includes(activeTool);
+  const isAnimateTool = rigMode === 'ANIMATE';
   const color = isSelected
     ? (isAnimateTool ? '#34d399' : SELECTED_COLOR)
     : (bone.color || '#f59e0b');
@@ -146,6 +147,7 @@ export const SkeletonOverlay: React.FC<SkeletonOverlayProps> = ({
   activeSkeletonId,
   selectedBoneIds,
   activeTool,
+  rigMode,
   onBonePointerDown,
   onBonePointerUp,
   boxSelectRect,
@@ -182,6 +184,7 @@ export const SkeletonOverlay: React.FC<SkeletonOverlayProps> = ({
                 bone={bone}
                 isSelected={isActive && selectedBoneIds.has(bone.id)}
                 activeTool={activeTool}
+                rigMode={rigMode}
                 onPointerDown={onBonePointerDown}
                 onPointerUp={onBonePointerUp}
               />

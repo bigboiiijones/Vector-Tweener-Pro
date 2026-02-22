@@ -596,6 +596,7 @@ const App: React.FC = () => {
                       activeSkeletonId={rigging.activeSkeletonId}
                       selectedBoneIds={rigging.selectedBoneIds}
                       activeTool={activeRigTool}
+                      rigMode={rigging.rigMode}
                       viewport={viewport}
                       onBonePointerDown={rigInteraction.handleBonePointerDown as any}
                       onBonePointerUp={rigInteraction.handleBonePointerUp as any}
