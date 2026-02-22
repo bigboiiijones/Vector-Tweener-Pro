@@ -15,16 +15,21 @@ function lerpAngle(a: number, b: number, t: number): number {
   return a + d * t;
 }
 
-// ─── Parent propagation (FIXED) ───────────────────────────────────────────────
+// ─── Parent propagation ────────────────────────────────────────────────────────
 //
 // KEY INSIGHT: All angles in this system are WORLD-SPACE (absolute radians).
-// When a parent bone rotates, its TAIL moves in world space. Children whose
-// restHeadX/Y was at the parent's restTailX/Y should now have their headX/Y
-// at the parent's NEW tail position. The child's OWN angle does NOT change
-// unless the child is being directly manipulated.
+// When a parent bone moves/rotates, children should follow while preserving:
+//   1. Their structural rest offset from the parent's rest tail (the binding relationship)
+//   2. Their own animate-mode translate delta (how much the user moved THEM independently)
 //
-// So propagation = translate the child's head/tail to follow the parent tail,
-// preserving the child's own live angle unchanged.
+// The child's live head is decomposed into:
+//   - restOffset: child.restHead - parentRestTail  (structural position in rest pose)
+//   - animDelta:  child.liveHead - child.restHead  (independent animate-mode translate)
+//
+// When parent moves, we rotate the restOffset by parent's delta angle, place it
+// at the parent's live tail, and then re-add the child's animDelta on top.
+// This means a child that was independently moved will KEEP that offset,
+// rather than snapping back to its rest-relative position.
 //
 function propagateParentToBone(bone: Bone, allBones: Bone[]): Bone {
   if (!bone.parentBoneId) return bone;
@@ -35,28 +40,32 @@ function propagateParentToBone(bone: Bone, allBones: Bone[]): Bone {
   const parentLiveTailX = parent.headX + Math.cos(parent.angle) * parent.length;
   const parentLiveTailY = parent.headY + Math.sin(parent.angle) * parent.length;
 
-  // Child's rest offset from parent's rest tail
-  // (This is where the child "lives" relative to the parent tail at rest)
+  // Parent's rest tail position
   const parentRestTailX = parent.restHeadX + Math.cos(parent.restAngle) * parent.restLength;
   const parentRestTailY = parent.restHeadY + Math.sin(parent.restAngle) * parent.restLength;
 
-  // Offset of child head from parent rest tail
-  const offsetX = bone.restHeadX - parentRestTailX;
-  const offsetY = bone.restHeadY - parentRestTailY;
+  // Structural offset: child rest head relative to parent rest tail
+  const restOffX = bone.restHeadX - parentRestTailX;
+  const restOffY = bone.restHeadY - parentRestTailY;
 
-  // Rotate that rest offset by the parent's delta angle (parent's rotation in animate pose)
+  // Child's own animate-mode translate delta (independent movement by user)
+  // This is preserved regardless of what the parent does.
+  const animDeltaX = bone.headX - bone.restHeadX;
+  const animDeltaY = bone.headY - bone.restHeadY;
+
+  // Rotate the structural rest offset by the parent's delta angle
   const parentDelta = parent.angle - parent.restAngle;
   const cosD = Math.cos(parentDelta);
   const sinD = Math.sin(parentDelta);
-  const rotOffX = offsetX * cosD - offsetY * sinD;
-  const rotOffY = offsetX * sinD + offsetY * cosD;
+  const rotOffX = restOffX * cosD - restOffY * sinD;
+  const rotOffY = restOffX * sinD + restOffY * cosD;
 
-  // Child's new head = parent's live tail + rotated offset
-  const newHeadX = parentLiveTailX + rotOffX;
-  const newHeadY = parentLiveTailY + rotOffY;
+  // Child's new head = parent's live tail + rotated structural offset + child's own animate delta
+  // parentLiveTailX already incorporates parent's full translate + rotation, so no extra step needed.
+  const newHeadX = parentLiveTailX + rotOffX + animDeltaX;
+  const newHeadY = parentLiveTailY + rotOffY + animDeltaY;
 
   // Child's own angle is PRESERVED — it doesn't spin with parent
-  // (only translation/position changes; the child's own orientation is unchanged)
   const ownAngle = bone.angle;
   const newTailX = newHeadX + Math.cos(ownAngle) * bone.length;
   const newTailY = newHeadY + Math.sin(ownAngle) * bone.length;
@@ -588,6 +597,133 @@ export const useRigging = () => {
     });
   }, [boundPoints, skeletons]);
 
+  // ── Bound Layer deformation ───────────────────────────────────────────────
+  // Applies bone transforms to ALL strokes that belong to a bound layer
+  // (including strokes in nested child layers of GROUP and SWITCH layers).
+  // `layers` is the full layer list from the layer system, needed to resolve
+  // the layer hierarchy and find child layers of any bound group/switch layer.
+  const getBoundLayerDeformedStrokes = useCallback((
+    strokes: Stroke[],
+    layers: { id: string; parentId: string | null }[]
+  ): Stroke[] => {
+    if (boundLayers.length === 0 || skeletons.length === 0) return strokes;
+
+    // Build a map: layerId → all descendant layerIds (inclusive of self)
+    // This handles GROUP and SWITCH layers whose child layers should also be transformed.
+    const getDescendantLayerIds = (rootLayerId: string): Set<string> => {
+      const result = new Set<string>([rootLayerId]);
+      const queue = [rootLayerId];
+      while (queue.length > 0) {
+        const currentId = queue.shift()!;
+        for (const layer of layers) {
+          if (layer.parentId === currentId && !result.has(layer.id)) {
+            result.add(layer.id);
+            queue.push(layer.id);
+          }
+        }
+      }
+      return result;
+    };
+
+    // Build transform map: layerId (and all its descendants) → bone transform info
+    interface LayerBoneTransform {
+      dx: number;
+      dy: number;
+      dAngle: number;
+      pivotX: number;
+      pivotY: number;
+      axisScale: number;
+      perpScale: number;
+    }
+
+    const layerTransformMap = new Map<string, LayerBoneTransform>();
+
+    for (const bl of boundLayers) {
+      const skeleton = skeletons.find(s => s.id === bl.skeletonId);
+      if (!skeleton) continue;
+      const bone = skeleton.bones.find(b => b.id === bl.boneId);
+      if (!bone) continue;
+
+      const dAngle = bone.angle - bone.restAngle;
+      const dx = bone.headX - bone.restHeadX;
+      const dy = bone.headY - bone.restHeadY;
+      const axisScale = bone.restLength > 0 ? bone.length / bone.restLength : 1;
+      const perpScale = axisScale > 0 ? 1 / Math.sqrt(Math.abs(axisScale)) : 1;
+
+      const hasXform =
+        Math.abs(dAngle) > 0.00001 ||
+        Math.abs(dx) > 0.001 ||
+        Math.abs(dy) > 0.001 ||
+        Math.abs(axisScale - 1) > 0.001;
+      if (!hasXform) continue;
+
+      const transform: LayerBoneTransform = {
+        dx, dy, dAngle,
+        pivotX: bone.restHeadX,
+        pivotY: bone.restHeadY,
+        axisScale,
+        perpScale,
+      };
+
+      // Apply this transform to the bound layer AND all its nested children
+      const affectedLayerIds = getDescendantLayerIds(bl.layerId);
+      for (const lid of affectedLayerIds) {
+        // If multiple bones affect the same layer, last-write wins (bone priority by order).
+        // More sophisticated multi-bone blending could be added later if needed.
+        layerTransformMap.set(lid, transform);
+      }
+    }
+
+    if (layerTransformMap.size === 0) return strokes;
+
+    return strokes.map(stroke => {
+      const xf = layerTransformMap.get(stroke.layerId);
+      if (!xf) return stroke;
+
+      const { dx, dy, dAngle, pivotX, pivotY, axisScale, perpScale } = xf;
+      const cosA = Math.cos(dAngle);
+      const sinA = Math.sin(dAngle);
+      const cosR = Math.cos(0); // rest angle of layer pivot is 0 (world-axis aligned)
+      const sinR = Math.sin(0);
+
+      const transformPoint = (x: number, y: number): { x: number; y: number } => {
+        // Offset from pivot
+        const rOffX = x - pivotX;
+        const rOffY = y - pivotY;
+
+        // Squash/stretch along world axes (axis = 0 = horizontal)
+        const axisP =  rOffX * cosR + rOffY * sinR;
+        const perpP = -rOffX * sinR + rOffY * cosR;
+        const sAxis = axisP * axisScale;
+        const sPerp = perpP * perpScale;
+        const sOffX = sAxis * cosR - sPerp * sinR;
+        const sOffY = sAxis * sinR + sPerp * cosR;
+
+        // Rotate by delta angle around pivot
+        const rotX = sOffX * cosA - sOffY * sinA;
+        const rotY = sOffX * sinA + sOffY * cosA;
+
+        return {
+          x: pivotX + rotX + dx,
+          y: pivotY + rotY + dy,
+        };
+      };
+
+      const newPoints = stroke.points.map(pt => {
+        const np = transformPoint(pt.x, pt.y);
+        return {
+          ...pt,
+          x: np.x,
+          y: np.y,
+          cp1: pt.cp1 ? transformPoint(pt.cp1.x, pt.cp1.y) : undefined,
+          cp2: pt.cp2 ? transformPoint(pt.cp2.x, pt.cp2.y) : undefined,
+        };
+      });
+
+      return { ...stroke, points: newPoints };
+    });
+  }, [boundLayers, skeletons]);
+
   return {
     skeletons, activeSkeletonId, setActiveSkeletonId,
     selectedBoneIds, activeBoneId,
@@ -613,5 +749,6 @@ export const useRigging = () => {
     applyFlexiBind, enableFlexiBind, disableFlexiBind,
     applyBoneKeyframeAtFrame,
     getDeformedStrokes,
+    getBoundLayerDeformedStrokes,
   };
 };
