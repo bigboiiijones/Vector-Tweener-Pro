@@ -61,11 +61,10 @@ const App: React.FC = () => {
       overwriteTargets: false, 
       swapTargets: false,
       autoMatchStrategy: 'INDEX',
-      snappingEnabled: false,
+      snappingEnabled: true,
       crossLayerSnapping: false,
       crossLayerPainting: true,
       crossGroupPainting: true,
-      closeCreatesFill: true,
       smoothingFactor: 20,
       showBezierHandles: true,
       transformMode: TransformMode.TRANSLATE,
@@ -75,7 +74,6 @@ const App: React.FC = () => {
       defaultWidth: 2,
       defaultTaperStart: 0,
       defaultTaperEnd: 0,
-      autoClose: false,
       defaultFillColor: '#000000',
       drawStroke: true,
       drawFill: false,
@@ -108,7 +106,7 @@ const App: React.FC = () => {
       setToolOptions(prev => ({
           ...prev,
           transformMode: TransformMode.TRANSLATE,
-          snappingEnabled: currentTool === ToolType.CURVE ? true : prev.snappingEnabled
+          snappingEnabled: [ToolType.CURVE, ToolType.PEN, ToolType.ADD_POINTS].includes(currentTool) ? true : prev.snappingEnabled
       }));
   }, [currentTool]);
 
@@ -138,9 +136,17 @@ const App: React.FC = () => {
   // ── Bone deformation post-process ────────────────────────────────────────────
   // When in rig mode and bound points exist, deform strokes by current bone poses.
   // This works alongside (not replacing) the stroke tweening in tweening.ts.
-  const rigDeformedStrokes = isRigMode
+  // Step 1: Point-level deformation via bound points (flexi-bind / manual bind).
+  // Step 2: Layer-level deformation via bound layers (GROUP/SWITCH layer bone binding).
+  //         This applies the bone transform to every stroke in the bound layer AND
+  //         all nested child layers, enabling full group/switch rig support.
+  const pointDeformedStrokes = isRigMode
     ? rigging.getDeformedStrokes(displayedStrokes)
     : displayedStrokes;
+
+  const rigDeformedStrokes = isRigMode && rigging.boundLayers.length > 0
+    ? rigging.getBoundLayerDeformedStrokes(pointDeformedStrokes, layerSystem.layers)
+    : pointDeformedStrokes;
   
   // Get active context (for onionskins and tools working on active layer)
   const { prev: prevContext, next: nextContext } = keyframeSystem.getTweenContext(currentFrameIndex, layerSystem.activeLayerId);
