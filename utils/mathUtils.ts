@@ -23,7 +23,7 @@ export const isClosedPath = (pts: Point[]): boolean => {
   return len > 0 && (endD / len) < 0.05; 
 };
 
-export const toPathString = (points: Point[]) => {
+export const toPathString = (points: Point[], isClosed?: boolean) => {
     if (!points || points.length === 0) return '';
     
     let d = `M ${points[0].x} ${points[0].y}`;
@@ -39,8 +39,29 @@ export const toPathString = (points: Point[]) => {
         }
     }
 
-    const isClosed = points.length > 2 && distance(points[0], points[points.length-1]) < 2;
-    return `${d} ${isClosed ? 'Z' : ''}`;
+    // BUGFIX: Use explicit isClosed flag when provided; otherwise fall back to the
+    // distance heuristic.  Merged/closed strokes set isClosed=true but the last point
+    // may not sit within 2px of the first after the duplicate-removal slice, causing
+    // an invisible open gap between the seam points.
+    const shouldClose = isClosed !== undefined
+        ? isClosed
+        : (points.length > 2 && distance(points[0], points[points.length-1]) < 2);
+
+    if (shouldClose) {
+        // CRITICAL: SVG "Z" draws a STRAIGHT line back to the start — it does NOT
+        // respect bezier control points. For smooth closed bezier paths, we must
+        // explicitly render the closing segment as a "C" command using the last
+        // point's cp2 and the first point's cp1, THEN add Z for fill purposes.
+        const last = points[points.length - 1];
+        const first = points[0];
+        if (last.cp2 && first.cp1) {
+            d += ` C ${last.cp2.x} ${last.cp2.y}, ${first.cp1.x} ${first.cp1.y}, ${first.x} ${first.y}`;
+        }
+        d += ' Z';
+        return d;
+    }
+
+    return d;
 };
 
 // --- Bezier Math ---
